@@ -31,15 +31,52 @@ export default function Home() {
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [previewFile, setPreviewFile] = useState<File | null>(null);
+  const [comfyJson, setComfyJson] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
 
-  const handleFilePick = (file: File) => {
+  const extractPngMeta = (file: File): Promise<{ workflow?: string; prompt?: string }> =>
+    new Promise(resolve => {
+      const reader = new FileReader();
+      reader.onload = e => {
+        try {
+          const buf = new Uint8Array(e.target!.result as ArrayBuffer);
+          const dec = new TextDecoder('latin1');
+          const result: { workflow?: string; prompt?: string } = {};
+          let i = 8; // skip PNG signature
+          while (i < buf.length - 12) {
+            const len = (buf[i] << 24) | (buf[i+1] << 16) | (buf[i+2] << 8) | buf[i+3];
+            const type = dec.decode(buf.slice(i+4, i+8));
+            if (type === 'tEXt' || type === 'iTXt') {
+              const data = dec.decode(buf.slice(i+8, i+8+len));
+              const nullIdx = data.indexOf('\0');
+              if (nullIdx !== -1) {
+                const key = data.slice(0, nullIdx).toLowerCase();
+                const val = data.slice(nullIdx + 1).replace(/^\0+/, '');
+                if (key === 'workflow') result.workflow = val;
+                if (key === 'prompt') result.prompt = val;
+              }
+            }
+            if (type === 'IEND') break;
+            i += 12 + len;
+          }
+          resolve(result);
+        } catch { resolve({}); }
+      };
+      reader.readAsArrayBuffer(file);
+    });
+
+  const handleFilePick = async (file: File) => {
     setPreviewFile(file);
     if (fileRef.current) {
       const dt = new DataTransfer();
       dt.items.add(file);
       fileRef.current.files = dt.files;
+    }
+    if (file.name.endsWith('.png')) {
+      const meta = await extractPngMeta(file);
+      if (meta.workflow) setComfyJson(JSON.stringify(JSON.parse(meta.workflow), null, 2));
+      else if (meta.prompt) setComfyJson(JSON.stringify(JSON.parse(meta.prompt), null, 2));
     }
   };
 
@@ -65,6 +102,7 @@ export default function Home() {
       if (!res.ok) throw new Error(await res.text());
       form.reset();
       setPreviewFile(null);
+      setComfyJson('');
       setShowUpload(false);
       await fetchEntries();
     } catch (err) {
@@ -172,7 +210,7 @@ export default function Home() {
           <div className="bg-zinc-900 rounded-xl w-full max-w-lg" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800">
               <h2 className="font-semibold text-sm">업로드</h2>
-              <button onClick={() => { setShowUpload(false); setPreviewFile(null); }} className="text-zinc-500 hover:text-white text-lg leading-none">×</button>
+              <button onClick={() => { setShowUpload(false); setPreviewFile(null); setComfyJson(''); }} className="text-zinc-500 hover:text-white text-lg leading-none">×</button>
             </div>
             <form ref={formRef} onSubmit={handleUpload} className="p-5 space-y-3">
               <div>
@@ -223,8 +261,18 @@ export default function Home() {
                 <input name="negative_prompt" placeholder="네거티브 프롬프트..." className="w-full bg-zinc-800 text-sm text-zinc-200 rounded-lg px-3 py-2 outline-none placeholder:text-zinc-600" />
               </div>
               <div>
-                <label className="text-xs text-zinc-500 block mb-1">ComfyUI Settings (JSON)</label>
-                <textarea name="comfy_settings" rows={2} placeholder='{"steps": 20, "cfg": 7, ...}' className="w-full bg-zinc-800 text-sm text-zinc-400 rounded-lg px-3 py-2 outline-none resize-none placeholder:text-zinc-600 font-mono text-xs" />
+                <label className="text-xs text-zinc-500 block mb-1">
+                  ComfyUI Settings (JSON)
+                  {comfyJson && <span className="ml-2 text-green-500">✓ 자동 감지됨</span>}
+                </label>
+                <textarea
+                  name="comfy_settings"
+                  rows={2}
+                  value={comfyJson}
+                  onChange={e => setComfyJson(e.target.value)}
+                  placeholder='{"steps": 20, "cfg": 7, ...}'
+                  className="w-full bg-zinc-800 text-sm text-zinc-400 rounded-lg px-3 py-2 outline-none resize-none placeholder:text-zinc-600 font-mono text-xs"
+                />
               </div>
               <div>
                 <label className="text-xs text-zinc-500 block mb-1">Notes</label>
