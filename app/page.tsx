@@ -27,6 +27,31 @@ export default function Home() {
   const [filterCategory, setFilterCategory] = useState('all');
   const [sort, setSort] = useState('newest');
   const [selected, setSelected] = useState<Entry | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [editForm, setEditForm] = useState<Partial<Entry>>({});
+
+  const startEdit = () => { setEditing(true); setEditForm({ ...selected }); };
+
+  const saveEdit = async () => {
+    if (!selected) return;
+    const res = await fetch(`/api/entries/${selected.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(editForm),
+    });
+    const updated = await res.json();
+    setSelected(updated);
+    setEditing(false);
+    fetchEntries();
+  };
+
+  const deleteEntry = async () => {
+    if (!selected) return;
+    if (!confirm('삭제할까요?')) return;
+    await fetch(`/api/entries/${selected.id}`, { method: 'DELETE' });
+    setSelected(null);
+    fetchEntries();
+  };
   const [showUpload, setShowUpload] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
@@ -295,29 +320,56 @@ export default function Home() {
             className="bg-zinc-900 rounded-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto"
             onClick={e => e.stopPropagation()}
           >
+            <div className="flex items-center justify-between px-5 py-3 border-b border-zinc-800">
+              <div className="flex gap-2">
+                {!editing ? (
+                  <button onClick={startEdit} className="px-3 py-1 bg-zinc-800 text-zinc-300 text-xs rounded-full hover:bg-zinc-700">수정</button>
+                ) : (
+                  <>
+                    <button onClick={saveEdit} className="px-3 py-1 bg-white text-black text-xs rounded-full font-semibold">저장</button>
+                    <button onClick={() => setEditing(false)} className="px-3 py-1 bg-zinc-800 text-zinc-300 text-xs rounded-full">취소</button>
+                  </>
+                )}
+                <button onClick={deleteEntry} className="px-3 py-1 bg-zinc-800 text-red-400 text-xs rounded-full hover:bg-zinc-700">삭제</button>
+              </div>
+              <button onClick={() => { setSelected(null); setEditing(false); }} className="text-zinc-500 hover:text-white text-lg leading-none">×</button>
+            </div>
             <div className="flex gap-4 p-5">
-              <img
-                src={selected.image_path}
-                alt=""
-                className="w-64 h-auto object-cover rounded-lg flex-shrink-0"
-              />
+              <img src={selected.image_path} alt="" className="w-64 h-auto object-cover rounded-lg flex-shrink-0" />
               <div className="flex-1 min-w-0 space-y-3">
                 <div className="flex gap-2 flex-wrap">
-                  <span className="px-2 py-0.5 bg-zinc-800 rounded text-xs text-zinc-300">{selected.model}</span>
-                  <span className="px-2 py-0.5 bg-zinc-800 rounded text-xs text-zinc-300">{CATEGORY_LABEL[selected.category] ?? selected.category}</span>
-                  <span className="px-2 py-0.5 bg-zinc-800 rounded text-xs text-zinc-500">{new Date(selected.created_at).toLocaleDateString('ko-KR')}</span>
+                  {editing ? (
+                    <>
+                      <input value={editForm.model ?? ''} onChange={e => setEditForm(f => ({...f, model: e.target.value}))} className="bg-zinc-800 text-zinc-200 text-xs px-2 py-0.5 rounded outline-none w-32" />
+                      <select value={editForm.category ?? 'etc'} onChange={e => setEditForm(f => ({...f, category: e.target.value}))} className="bg-zinc-800 text-zinc-200 text-xs px-2 py-0.5 rounded outline-none">
+                        {CATEGORIES.filter(c => c !== 'all').map(c => <option key={c} value={c}>{CATEGORY_LABEL[c]}</option>)}
+                      </select>
+                    </>
+                  ) : (
+                    <>
+                      <span className="px-2 py-0.5 bg-zinc-800 rounded text-xs text-zinc-300">{selected.model}</span>
+                      <span className="px-2 py-0.5 bg-zinc-800 rounded text-xs text-zinc-300">{CATEGORY_LABEL[selected.category] ?? selected.category}</span>
+                      <span className="px-2 py-0.5 bg-zinc-800 rounded text-xs text-zinc-500">{new Date(selected.created_at).toLocaleDateString('ko-KR')}</span>
+                    </>
+                  )}
                 </div>
                 <div>
                   <p className="text-xs text-zinc-500 mb-1">Prompt</p>
-                  <p className="text-sm text-zinc-200 whitespace-pre-wrap">{selected.prompt}</p>
+                  {editing ? (
+                    <textarea value={editForm.prompt ?? ''} onChange={e => setEditForm(f => ({...f, prompt: e.target.value}))} rows={4} className="w-full bg-zinc-800 text-sm text-zinc-200 rounded-lg px-3 py-2 outline-none resize-none" />
+                  ) : (
+                    <p className="text-sm text-zinc-200 whitespace-pre-wrap">{selected.prompt}</p>
+                  )}
                 </div>
-                {selected.negative_prompt && (
-                  <div>
-                    <p className="text-xs text-zinc-500 mb-1">Negative</p>
-                    <p className="text-sm text-zinc-400 whitespace-pre-wrap">{selected.negative_prompt}</p>
-                  </div>
-                )}
-                {selected.comfy_settings && (
+                <div>
+                  <p className="text-xs text-zinc-500 mb-1">Negative</p>
+                  {editing ? (
+                    <textarea value={editForm.negative_prompt ?? ''} onChange={e => setEditForm(f => ({...f, negative_prompt: e.target.value}))} rows={2} className="w-full bg-zinc-800 text-sm text-zinc-400 rounded-lg px-3 py-2 outline-none resize-none" />
+                  ) : (
+                    selected.negative_prompt && <p className="text-sm text-zinc-400 whitespace-pre-wrap">{selected.negative_prompt}</p>
+                  )}
+                </div>
+                {selected.comfy_settings && !editing && (
                   <div>
                     <p className="text-xs text-zinc-500 mb-1">ComfyUI Settings</p>
                     <pre className="text-xs text-zinc-400 bg-zinc-800 p-3 rounded overflow-auto max-h-48">
@@ -325,12 +377,14 @@ export default function Home() {
                     </pre>
                   </div>
                 )}
-                {selected.notes && (
-                  <div>
-                    <p className="text-xs text-zinc-500 mb-1">Notes</p>
-                    <p className="text-sm text-zinc-400">{selected.notes}</p>
-                  </div>
-                )}
+                <div>
+                  <p className="text-xs text-zinc-500 mb-1">Notes</p>
+                  {editing ? (
+                    <input value={editForm.notes ?? ''} onChange={e => setEditForm(f => ({...f, notes: e.target.value}))} className="w-full bg-zinc-800 text-sm text-zinc-200 rounded-lg px-3 py-2 outline-none" />
+                  ) : (
+                    selected.notes && <p className="text-sm text-zinc-400">{selected.notes}</p>
+                  )}
+                </div>
               </div>
             </div>
           </div>
