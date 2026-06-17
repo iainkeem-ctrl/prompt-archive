@@ -26,6 +26,7 @@ export default function Home() {
   const [filterModel, setFilterModel] = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
   const [sort, setSort] = useState('newest');
+  const [columns, setColumns] = useState(4);
   const [selected, setSelected] = useState<Entry | null>(null);
   const [editing, setEditing] = useState(false);
   const [editForm, setEditForm] = useState<Partial<Entry>>({});
@@ -155,6 +156,15 @@ export default function Home() {
       <header className="border-b border-zinc-800 px-6 py-4 flex items-center justify-between">
         <h1 className="text-xl font-bold tracking-tight">Prompt Archive</h1>
         <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-zinc-600">⊟</span>
+            <input
+              type="range" min={2} max={8} value={columns}
+              onChange={e => setColumns(Number(e.target.value))}
+              className="w-20 accent-white"
+            />
+            <span className="text-xs text-zinc-600">⊞</span>
+          </div>
           <span className="text-zinc-500 text-sm">{entries.length} entries</span>
           <button
             onClick={() => setShowUpload(true)}
@@ -204,7 +214,7 @@ export default function Home() {
             <p className="text-sm mt-1">이미지를 업로드해서 시작하세요</p>
           </div>
         ) : (
-          <div className="columns-2 sm:columns-3 lg:columns-4 xl:columns-5 gap-3 space-y-3">
+          <div className="gap-3 space-y-3" style={{ columns }}>
             {entries.map(entry => (
               <div
                 key={entry.id}
