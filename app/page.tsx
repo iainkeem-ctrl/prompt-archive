@@ -29,21 +29,42 @@ export default function Home() {
   const [selected, setSelected] = useState<Entry | null>(null);
   const [showUpload, setShowUpload] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+  const [previewFile, setPreviewFile] = useState<File | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
+
+  const handleFilePick = (file: File) => {
+    setPreviewFile(file);
+    if (fileRef.current) {
+      const dt = new DataTransfer();
+      dt.items.add(file);
+      fileRef.current.files = dt.files;
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    const file = e.dataTransfer.files[0];
+    if (file && file.type.startsWith('image/')) handleFilePick(file);
+  };
 
   const handleUpload = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const form = e.currentTarget;
     const fd = new FormData(form);
-    if (!fd.get('image') || !(fd.get('image') as File).size) {
+    if (!previewFile) {
       alert('이미지를 선택해주세요');
       return;
     }
+    fd.set('image', previewFile);
     setUploading(true);
     try {
       const res = await fetch('/api/upload', { method: 'POST', body: fd });
       if (!res.ok) throw new Error(await res.text());
       form.reset();
+      setPreviewFile(null);
       setShowUpload(false);
       await fetchEntries();
     } catch (err) {
@@ -151,12 +172,32 @@ export default function Home() {
           <div className="bg-zinc-900 rounded-xl w-full max-w-lg" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800">
               <h2 className="font-semibold text-sm">업로드</h2>
-              <button onClick={() => setShowUpload(false)} className="text-zinc-500 hover:text-white text-lg leading-none">×</button>
+              <button onClick={() => { setShowUpload(false); setPreviewFile(null); }} className="text-zinc-500 hover:text-white text-lg leading-none">×</button>
             </div>
-            <form onSubmit={handleUpload} className="p-5 space-y-3">
+            <form ref={formRef} onSubmit={handleUpload} className="p-5 space-y-3">
               <div>
-                <label className="text-xs text-zinc-500 block mb-1">이미지 *</label>
-                <input ref={fileRef} name="image" type="file" accept="image/*" required className="w-full text-sm text-zinc-300 file:mr-3 file:px-3 file:py-1 file:rounded-full file:border-0 file:bg-zinc-700 file:text-zinc-300 file:text-xs" />
+                <input ref={fileRef} name="image" type="file" accept="image/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) handleFilePick(f); }} />
+                <div
+                  onClick={() => fileRef.current?.click()}
+                  onDrop={handleDrop}
+                  onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+                  onDragLeave={() => setDragOver(false)}
+                  className={`w-full h-32 rounded-lg border-2 border-dashed flex flex-col items-center justify-center cursor-pointer transition-colors ${
+                    dragOver ? 'border-white bg-zinc-800' : 'border-zinc-700 hover:border-zinc-500'
+                  }`}
+                >
+                  {previewFile ? (
+                    <div className="flex flex-col items-center gap-1">
+                      <img src={URL.createObjectURL(previewFile)} className="h-20 object-contain rounded" />
+                      <span className="text-xs text-zinc-500">{previewFile.name}</span>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center gap-1 text-zinc-500">
+                      <span className="text-2xl">↑</span>
+                      <span className="text-xs">이미지를 드래그하거나 클릭해서 선택</span>
+                    </div>
+                  )}
+                </div>
               </div>
               <div>
                 <label className="text-xs text-zinc-500 block mb-1">Prompt *</label>
