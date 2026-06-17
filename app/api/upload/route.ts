@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import getDb from '@/lib/db';
+import { getDb, initDb } from '@/lib/db';
+import { put } from '@vercel/blob';
 import { v4 as uuidv4 } from 'uuid';
-import path from 'path';
-import fs from 'fs';
 
 export async function POST(req: NextRequest) {
   try {
+    await initDb();
+    const sql = getDb();
     const formData = await req.formData();
     const file = formData.get('image') as File | null;
     const prompt = formData.get('prompt') as string;
@@ -21,19 +22,14 @@ export async function POST(req: NextRequest) {
 
     const id = uuidv4();
     const ext = file.name.split('.').pop() || 'png';
-    const filename = `${id}.${ext}`;
-    const savePath = path.join(process.cwd(), 'public', 'images', filename);
+    const blob = await put(`images/${id}.${ext}`, file, { access: 'public' });
 
-    const buffer = Buffer.from(await file.arrayBuffer());
-    fs.writeFileSync(savePath, buffer);
+    await sql`
+      INSERT INTO entries (id, image_path, prompt, negative_prompt, model, category, comfy_settings, notes)
+      VALUES (${id}, ${blob.url}, ${prompt}, ${negative_prompt}, ${model}, ${category}, ${comfy_settings}, ${notes})
+    `;
 
-    const db = getDb();
-    db.prepare(`
-      INSERT INTO entries (id, image_path, prompt, negative_prompt, model, category, comfy_settings, notes, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
-    `).run(id, `/images/${filename}`, prompt, negative_prompt, model, category, comfy_settings, notes);
-
-    return NextResponse.json({ id, image_path: `/images/${filename}` }, { status: 201 });
+    return NextResponse.json({ id, image_path: blob.url }, { status: 201 });
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 });
   }
