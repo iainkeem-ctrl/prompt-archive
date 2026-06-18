@@ -72,6 +72,7 @@ export default function Home() {
   const [genResult, setGenResult] = useState<{ prompt: string; negative_prompt: string } | null>(null);
   const [refImage, setRefImage] = useState<{ file: File; dataUrl: string } | null>(null);
   const [genInstruction, setGenInstruction] = useState('');
+  const [genCategory, setGenCategory] = useState('all');
   const [showGenModal, setShowGenModal] = useState(false);
   const [genTab, setGenTab] = useState<'reference' | 'avatar'>('reference');
   const AVATAR_MULTI_KEYS = ['skin_detail', 'pose', 'style'];
@@ -399,13 +400,13 @@ export default function Home() {
     try {
       let body: Record<string, unknown>;
       if (mode === 'avatar') {
-        body = { mode: 'avatar', avatar };
+        body = { mode: 'avatar', avatar, category: genCategory };
       } else if (refImage) {
         const base64 = refImage.dataUrl.split(',')[1];
         const mediaType = refImage.file.type || 'image/jpeg';
-        body = { mode: 'ref_image', refImageBase64: base64, refMediaType: mediaType, instruction: genInstruction };
+        body = { mode: 'ref_image', refImageBase64: base64, refMediaType: mediaType, instruction: genInstruction, category: genCategory };
       } else {
-        body = { mode: 'reference', instruction: genInstruction };
+        body = { mode: 'reference', instruction: genInstruction, category: genCategory };
       }
       const res = await fetch('/api/generate-prompt', {
         method: 'POST',
@@ -729,6 +730,19 @@ export default function Home() {
               {!generating && <button onClick={() => setShowGenModal(false)} className="text-zinc-500 hover:text-white text-lg">×</button>}
             </div>
             <div className="p-5 space-y-4 overflow-y-auto flex-1">
+
+              {!genResult && !generating && (
+                <div>
+                  <p className="text-xs text-zinc-500 mb-2">참고 카테고리</p>
+                  <div className="flex gap-1.5 flex-wrap">
+                    {(['all', 'portrait', 'product', 'graphic', 'etc'] as const).map(cat => (
+                      <button key={cat} onClick={() => setGenCategory(cat)} className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors ${genCategory === cat ? 'bg-indigo-600 text-white' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'}`}>
+                        {({ all: '전체', portrait: '인물', product: '제품', graphic: '그래픽', etc: '기타' } as Record<string, string>)[cat]}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {genTab === 'reference' && !genResult && !generating && (
                 <div className="space-y-3">
