@@ -377,14 +377,20 @@ export default function Home() {
   const openDuplicates = async () => {
     setShowDuplicates(true);
     setDupLoading(true);
-    const res = await fetch('/api/duplicates');
-    const data: DupGroup[] = await res.json();
-    setDupGroups(data);
-    // default: keep first (oldest) in each group
-    const defaults: Record<string, string> = {};
-    data.forEach((g, i) => { defaults[String(i)] = g.ids[0]; });
-    setKeepIds(defaults);
-    setDupLoading(false);
+    try {
+      const res = await fetch('/api/duplicates');
+      if (!res.ok) throw new Error(await res.text());
+      const data: DupGroup[] = await res.json();
+      setDupGroups(data);
+      const defaults: Record<string, string> = {};
+      data.forEach((g, i) => { defaults[String(i)] = g.ids[0]; });
+      setKeepIds(defaults);
+    } catch (e) {
+      alert('오류: ' + e);
+      setShowDuplicates(false);
+    } finally {
+      setDupLoading(false);
+    }
   };
 
   const deleteDuplicates = async () => {
