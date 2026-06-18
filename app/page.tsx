@@ -151,6 +151,7 @@ export default function Home() {
   const [pagedragOver, setPageDragOver] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
+  const uploadOriginalFile = useRef<File | null>(null);
 
   const extractPngMeta = (file: File): Promise<{ workflow?: string; prompt?: string }> =>
     new Promise(resolve => {
@@ -255,6 +256,7 @@ export default function Home() {
     });
 
   const handleFilePick = async (file: File) => {
+    uploadOriginalFile.current = file;
     const compressed = await compressImage(file);
     setPreviewFile(compressed);
     if (fileRef.current) {
@@ -356,7 +358,8 @@ export default function Home() {
   const handleUpload = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!previewFile) { alert('이미지를 선택해주세요'); return; }
-    const fileHash = await hashFile(previewFile);
+    const originalForHash = uploadOriginalFile.current ?? previewFile;
+    const fileHash = await hashFile(originalForHash);
     const fd = new FormData();
     fd.set('image', previewFile);
     fd.set('prompt', uploadForm.prompt);
