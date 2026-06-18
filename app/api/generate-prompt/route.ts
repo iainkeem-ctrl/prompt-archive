@@ -6,22 +6,35 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 
 export async function POST(req: NextRequest) {
   try {
-    const { mode, instruction, avatar, refImageBase64, refMediaType } = await req.json();
+    const { mode, instruction, avatar, refImageBase64, refMediaType, category } = await req.json();
     const sql = getDb();
 
-    const archive = await sql`
-      SELECT prompt, negative_prompt, model
-      FROM entries
-      ORDER BY created_at DESC
-      LIMIT 30
-    `;
+    const CATEGORY_LABEL: Record<string, string> = {
+      portrait: '인물', product: '제품', graphic: '그래픽', etc: '기타',
+    };
+
+    const archive = category && category !== 'all'
+      ? await sql`
+          SELECT prompt, negative_prompt, model
+          FROM entries
+          WHERE category = ${category}
+          ORDER BY created_at DESC
+        `
+      : await sql`
+          SELECT prompt, negative_prompt, model
+          FROM entries
+          ORDER BY created_at DESC
+          LIMIT 50
+        `;
+
+    const categoryLabel = category && category !== 'all' ? CATEGORY_LABEL[category] ?? category : null;
 
     const archiveContext = (archive as Array<{ prompt: string; negative_prompt?: string }>).map(e =>
       `Prompt: ${e.prompt}${e.negative_prompt ? `\nNegative: ${e.negative_prompt}` : ''}`
     ).join('\n---\n');
 
     const systemPrefix = `당신은 AI 이미지 생성(ComfyUI, Stable Diffusion) 전문 프롬프트 엔지니어입니다.
-아래는 사용자의 프롬프트 아카이브입니다. 이 패턴과 스타일을 학습해서 새 프롬프트를 작성하세요.
+아래는 사용자의 프롬프트 아카이브${categoryLabel ? ` (카테고리: ${categoryLabel})` : ''}입니다. 이 패턴과 스타일을 학습해서 새 프롬프트를 작성하세요.
 
 [아카이브 패턴]
 ${archiveContext}
