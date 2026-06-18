@@ -241,9 +241,9 @@ export default function Home() {
       setBatchProgress(p => p ? { ...p, done: i, current: images[i].name } : p);
       try {
         await uploadFileDirect(images[i]);
-        updatedLog[i] = { ...updatedLog[i], status: 'done' };
+        updatedLog[i] = { name: updatedLog[i].name, status: 'done' as const };
       } catch {
-        updatedLog[i] = { ...updatedLog[i], status: 'error' };
+        updatedLog[i] = { name: updatedLog[i].name, status: 'error' as const };
       }
       log[i] = updatedLog[i];
       setBatchProgress(p => p ? { ...p, done: i + 1, log: [...log] } : p);
