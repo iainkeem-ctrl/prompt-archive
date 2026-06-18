@@ -138,21 +138,22 @@ export default function Home() {
 
   const compressImage = (file: File): Promise<File> =>
     new Promise(resolve => {
-      const MAX = 4 * 1024 * 1024;
-      if (file.size <= MAX) { resolve(file); return; }
       const img = new Image();
       const url = URL.createObjectURL(file);
       img.onload = () => {
         URL.revokeObjectURL(url);
-        const scale = Math.min(1, Math.sqrt(MAX / file.size));
+        const MAX_PX = 2000;
+        const scale = Math.min(1, MAX_PX / Math.max(img.width, img.height));
         const w = Math.round(img.width * scale);
         const h = Math.round(img.height * scale);
         const canvas = document.createElement('canvas');
         canvas.width = w; canvas.height = h;
         canvas.getContext('2d')!.drawImage(img, 0, 0, w, h);
         canvas.toBlob(blob => {
-          resolve(blob ? new File([blob], file.name.replace(/\.png$/i, '.jpg'), { type: 'image/jpeg' }) : file);
-        }, 'image/jpeg', 0.88);
+          if (!blob) { resolve(file); return; }
+          const name = file.name.replace(/\.[^.]+$/, '.jpg');
+          resolve(new File([blob], name, { type: 'image/jpeg' }));
+        }, 'image/jpeg', 0.82);
       };
       img.src = url;
     });
