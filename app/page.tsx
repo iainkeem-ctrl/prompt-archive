@@ -61,6 +61,12 @@ export default function Home() {
   const [uploadForm, setUploadForm] = useState({ prompt: '', model: '', negative_prompt: '', category: 'etc', notes: '' });
   type BatchLog = { name: string; status: 'pending' | 'done' | 'duplicate' | 'error' };
   const [batchProgress, setBatchProgress] = useState<{ total: number; done: number; current: string; log: BatchLog[] } | null>(null);
+
+  type DupGroup = { key_prompt: string; ids: string[]; image_paths: string[]; models: string[]; dates: string[]; cnt: number };
+  const [showDuplicates, setShowDuplicates] = useState(false);
+  const [dupGroups, setDupGroups] = useState<DupGroup[]>([]);
+  const [dupLoading, setDupLoading] = useState(false);
+  const [keepIds, setKeepIds] = useState<Record<string, string>>({}); // groupIdx -> id to keep
   const [pagedragOver, setPageDragOver] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
@@ -303,6 +309,32 @@ export default function Home() {
     }
   };
 
+  const openDuplicates = async () => {
+    setShowDuplicates(true);
+    setDupLoading(true);
+    const res = await fetch('/api/duplicates');
+    const data: DupGroup[] = await res.json();
+    setDupGroups(data);
+    // default: keep first (oldest) in each group
+    const defaults: Record<string, string> = {};
+    data.forEach((g, i) => { defaults[String(i)] = g.ids[0]; });
+    setKeepIds(defaults);
+    setDupLoading(false);
+  };
+
+  const deleteDuplicates = async () => {
+    const toDelete: string[] = [];
+    dupGroups.forEach((g, i) => {
+      const keep = keepIds[String(i)] ?? g.ids[0];
+      g.ids.forEach(id => { if (id !== keep) toDelete.push(id); });
+    });
+    if (toDelete.length === 0) return;
+    if (!confirm(`${toDelete.length}개 항목을 삭제할까요?`)) return;
+    await Promise.all(toDelete.map(id => fetch(`/api/entries/${id}`, { method: 'DELETE' })));
+    setShowDuplicates(false);
+    fetchEntries();
+  };
+
   const fetchEntries = async () => {
     const params = new URLSearchParams();
     if (filterModel) params.set('model', filterModel);
@@ -364,6 +396,12 @@ export default function Home() {
             <span className="text-xs text-zinc-600">⊞</span>
           </div>
           <span className="text-zinc-500 text-sm">{entries.length} entries</span>
+          <button
+            onClick={openDuplicates}
+            className="px-3 py-1.5 bg-zinc-800 text-zinc-300 text-xs font-semibold rounded-full hover:bg-zinc-700 transition-colors"
+          >
+            중복 관리
+          </button>
           <button
             onClick={() => setShowUpload(true)}
             className="px-3 py-1.5 bg-white text-black text-xs font-semibold rounded-full hover:bg-zinc-200 transition-colors"
@@ -520,6 +558,56 @@ export default function Home() {
                 {uploading ? '업로드 중...' : '저장'}
               </button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {showDuplicates && (
+        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4" onClick={() => setShowDuplicates(false)}>
+          <div className="bg-zinc-900 rounded-xl w-full max-w-3xl max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800 flex-shrink-0">
+              <div>
+                <h2 className="font-semibold text-sm">중복 이미지 관리</h2>
+                {!dupLoading && <p className="text-xs text-zinc-500 mt-0.5">{dupGroups.length}개 그룹 발견 · 남길 이미지를 선택하세요</p>}
+              </div>
+              <div className="flex gap-2">
+                {!dupLoading && dupGroups.length > 0 && (
+                  <button onClick={deleteDuplicates} className="px-3 py-1.5 bg-red-600 text-white text-xs font-semibold rounded-full hover:bg-red-500">
+                    선택 제외 삭제
+                  </button>
+                )}
+                <button onClick={() => setShowDuplicates(false)} className="text-zinc-500 hover:text-white text-lg leading-none">×</button>
+              </div>
+            </div>
+            <div className="overflow-y-auto p-5 space-y-6">
+              {dupLoading && <div className="text-zinc-500 text-sm text-center py-10">찾는 중...</div>}
+              {!dupLoading && dupGroups.length === 0 && <div className="text-zinc-500 text-sm text-center py-10">중복 없음 👍</div>}
+              {dupGroups.map((group, gi) => (
+                <div key={gi} className="border border-zinc-800 rounded-lg p-4">
+                  <p className="text-xs text-zinc-500 mb-3 line-clamp-2">{group.key_prompt}</p>
+                  <div className="flex gap-3 flex-wrap">
+                    {group.ids.map((id, ii) => {
+                      const isKeep = (keepIds[String(gi)] ?? group.ids[0]) === id;
+                      return (
+                        <div
+                          key={id}
+                          onClick={() => setKeepIds(k => ({ ...k, [String(gi)]: id }))}
+                          className={`cursor-pointer rounded-lg overflow-hidden border-2 transition-all ${isKeep ? 'border-white' : 'border-zinc-700 opacity-50 hover:opacity-80'}`}
+                          style={{ width: 120 }}
+                        >
+                          <img src={group.image_paths[ii]} className="w-full h-20 object-cover" />
+                          <div className="px-2 py-1 bg-zinc-800">
+                            <p className="text-xs text-zinc-400 truncate">{group.models[ii]}</p>
+                            <p className="text-xs text-zinc-600">{new Date(group.dates[ii]).toLocaleDateString('ko-KR')}</p>
+                          </div>
+                          {isKeep && <div className="text-center text-xs bg-white text-black py-0.5 font-semibold">유지</div>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}
