@@ -93,31 +93,47 @@ export default function Home() {
       reader.readAsArrayBuffer(file);
     });
 
-  const parseComfyInfo = (promptJson: Record<string, unknown>) => {
+  type NodeLike = { class_type?: string; inputs?: Record<string, unknown>; type?: string; widgets_values?: unknown[] };
+
+  const parseComfyNodes = (nodes: NodeLike[]) => {
     let positive = '', negative = '', model = '';
     const ksampler: Record<string, unknown> = {};
-    for (const node of Object.values(promptJson) as Array<{ class_type?: string; inputs?: Record<string, unknown> }>) {
-      const cls = node.class_type ?? '';
+    // workflow format: nodes array with type + widgets_values
+    for (const node of nodes) {
+      const type = node.type ?? node.class_type ?? '';
+      const widgets = node.widgets_values ?? [];
       const inputs = node.inputs ?? {};
-      if (cls === 'CLIPTextEncode') {
-        const text = inputs.text;
-        if (typeof text === 'string') {
+      if (type === 'CLIPTextEncode' || type === 'Text Multiline') {
+        const text = (typeof inputs.text === 'string' ? inputs.text : null) ?? (typeof widgets[0] === 'string' ? widgets[0] : null);
+        if (typeof text === 'string' && text.trim()) {
           if (!positive) positive = text;
           else if (!negative) negative = text;
         }
-      } else if (cls === 'UNETLoader' || cls === 'CheckpointLoaderSimple') {
-        model = (inputs.unet_name ?? inputs.ckpt_name ?? '') as string;
-      } else if (cls === 'KSampler') {
-        for (const k of ['steps', 'cfg', 'sampler_name', 'scheduler', 'denoise', 'seed']) {
-          if (k in inputs) ksampler[k] = inputs[k];
-        }
+      } else if (type === 'UNETLoader' || type === 'CheckpointLoaderSimple') {
+        const name = inputs.unet_name ?? inputs.ckpt_name ?? widgets[0];
+        if (typeof name === 'string') model = name;
+      } else if (type === 'KSampler') {
+        const keys = ['seed', 'steps', 'cfg', 'sampler_name', 'scheduler', 'denoise'];
+        keys.forEach((k, i) => {
+          const v = inputs[k] ?? widgets[i];
+          if (v !== undefined) ksampler[k] = v;
+        });
       }
     }
-    const negKw = ['worst quality', 'bad quality', 'blurry', 'nsfw', 'ugly', 'low quality'];
-    if (positive && negative && negKw.some(kw => positive.toLowerCase().includes(kw))) {
-      [positive, negative] = [negative, positive];
-    }
     return { positive, negative, model, ksampler };
+  };
+
+  const parseComfyInfo = (json: Record<string, unknown>) => {
+    // workflow format: has top-level "nodes" array
+    if (Array.isArray(json.nodes)) {
+      return parseComfyNodes(json.nodes as NodeLike[]);
+    }
+    // prompt API format: flat object where each value has class_type
+    const nodes = Object.values(json) as NodeLike[];
+    if (nodes.some(n => n && typeof n === 'object' && 'class_type' in n)) {
+      return parseComfyNodes(nodes);
+    }
+    return { positive: '', negative: '', model: '', ksampler: {} };
   };
 
   const handleFilePick = async (file: File) => {
@@ -129,22 +145,23 @@ export default function Home() {
     }
     if (file.name.endsWith('.png')) {
       const meta = await extractPngMeta(file);
-      const raw = meta.prompt || meta.workflow;
-      if (raw) {
+      // prefer prompt (API format) for info extraction, fall back to workflow
+      for (const raw of [meta.prompt, meta.workflow]) {
+        if (!raw) continue;
         try {
           const parsed = JSON.parse(raw);
-          setComfyJson(JSON.stringify(parsed, null, 2));
           const { positive, negative, model, ksampler } = parseComfyInfo(parsed);
-          setUploadForm(f => ({
-            ...f,
-            prompt: positive || f.prompt,
-            negative_prompt: negative || f.negative_prompt,
-            model: model || f.model,
-          }));
-          if (Object.keys(ksampler).length > 0) {
-            setComfyJson(JSON.stringify(ksampler, null, 2));
+          if (positive || model) {
+            setUploadForm(f => ({
+              ...f,
+              prompt: positive || f.prompt,
+              negative_prompt: negative || f.negative_prompt,
+              model: model || f.model,
+            }));
+            setComfyJson(Object.keys(ksampler).length > 0 ? JSON.stringify(ksampler, null, 2) : JSON.stringify(parsed, null, 2));
+            break;
           }
-        } catch { /* ignore parse errors */ }
+        } catch { /* ignore */ }
       }
     }
   };
