@@ -58,6 +58,7 @@ export default function Home() {
   const [dragOver, setDragOver] = useState(false);
   const [previewFile, setPreviewFile] = useState<File | null>(null);
   const [comfyJson, setComfyJson] = useState('');
+  const [uploadForm, setUploadForm] = useState({ prompt: '', model: '', negative_prompt: '', category: 'etc', notes: '' });
   const fileRef = useRef<HTMLInputElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
 
@@ -92,6 +93,33 @@ export default function Home() {
       reader.readAsArrayBuffer(file);
     });
 
+  const parseComfyInfo = (promptJson: Record<string, unknown>) => {
+    let positive = '', negative = '', model = '';
+    const ksampler: Record<string, unknown> = {};
+    for (const node of Object.values(promptJson) as Array<{ class_type?: string; inputs?: Record<string, unknown> }>) {
+      const cls = node.class_type ?? '';
+      const inputs = node.inputs ?? {};
+      if (cls === 'CLIPTextEncode') {
+        const text = inputs.text;
+        if (typeof text === 'string') {
+          if (!positive) positive = text;
+          else if (!negative) negative = text;
+        }
+      } else if (cls === 'UNETLoader' || cls === 'CheckpointLoaderSimple') {
+        model = (inputs.unet_name ?? inputs.ckpt_name ?? '') as string;
+      } else if (cls === 'KSampler') {
+        for (const k of ['steps', 'cfg', 'sampler_name', 'scheduler', 'denoise', 'seed']) {
+          if (k in inputs) ksampler[k] = inputs[k];
+        }
+      }
+    }
+    const negKw = ['worst quality', 'bad quality', 'blurry', 'nsfw', 'ugly', 'low quality'];
+    if (positive && negative && negKw.some(kw => positive.toLowerCase().includes(kw))) {
+      [positive, negative] = [negative, positive];
+    }
+    return { positive, negative, model, ksampler };
+  };
+
   const handleFilePick = async (file: File) => {
     setPreviewFile(file);
     if (fileRef.current) {
@@ -101,8 +129,23 @@ export default function Home() {
     }
     if (file.name.endsWith('.png')) {
       const meta = await extractPngMeta(file);
-      if (meta.workflow) setComfyJson(JSON.stringify(JSON.parse(meta.workflow), null, 2));
-      else if (meta.prompt) setComfyJson(JSON.stringify(JSON.parse(meta.prompt), null, 2));
+      const raw = meta.prompt || meta.workflow;
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw);
+          setComfyJson(JSON.stringify(parsed, null, 2));
+          const { positive, negative, model, ksampler } = parseComfyInfo(parsed);
+          setUploadForm(f => ({
+            ...f,
+            prompt: positive || f.prompt,
+            negative_prompt: negative || f.negative_prompt,
+            model: model || f.model,
+          }));
+          if (Object.keys(ksampler).length > 0) {
+            setComfyJson(JSON.stringify(ksampler, null, 2));
+          }
+        } catch { /* ignore parse errors */ }
+      }
     }
   };
 
@@ -113,22 +156,28 @@ export default function Home() {
     if (file && file.type.startsWith('image/')) handleFilePick(file);
   };
 
+  const resetUploadModal = () => {
+    setPreviewFile(null);
+    setComfyJson('');
+    setUploadForm({ prompt: '', model: '', negative_prompt: '', category: 'etc', notes: '' });
+  };
+
   const handleUpload = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    const form = e.currentTarget;
-    const fd = new FormData(form);
-    if (!previewFile) {
-      alert('이미지를 선택해주세요');
-      return;
-    }
+    if (!previewFile) { alert('이미지를 선택해주세요'); return; }
+    const fd = new FormData();
     fd.set('image', previewFile);
+    fd.set('prompt', uploadForm.prompt);
+    fd.set('model', uploadForm.model);
+    fd.set('negative_prompt', uploadForm.negative_prompt);
+    fd.set('category', uploadForm.category);
+    fd.set('notes', uploadForm.notes);
+    fd.set('comfy_settings', comfyJson);
     setUploading(true);
     try {
       const res = await fetch('/api/upload', { method: 'POST', body: fd });
       if (!res.ok) throw new Error(await res.text());
-      form.reset();
-      setPreviewFile(null);
-      setComfyJson('');
+      resetUploadModal();
       setShowUpload(false);
       await fetchEntries();
     } catch (err) {
@@ -245,11 +294,11 @@ export default function Home() {
           <div className="bg-zinc-900 rounded-xl w-full max-w-lg" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800">
               <h2 className="font-semibold text-sm">업로드</h2>
-              <button onClick={() => { setShowUpload(false); setPreviewFile(null); setComfyJson(''); }} className="text-zinc-500 hover:text-white text-lg leading-none">×</button>
+              <button onClick={() => { setShowUpload(false); resetUploadModal(); }} className="text-zinc-500 hover:text-white text-lg leading-none">×</button>
             </div>
             <form ref={formRef} onSubmit={handleUpload} className="p-5 space-y-3">
               <div>
-                <input ref={fileRef} name="image" type="file" accept="image/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) handleFilePick(f); }} />
+                <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) handleFilePick(f); }} />
                 <div
                   onClick={() => fileRef.current?.click()}
                   onDrop={handleDrop}
@@ -273,17 +322,23 @@ export default function Home() {
                 </div>
               </div>
               <div>
-                <label className="text-xs text-zinc-500 block mb-1">Prompt *</label>
-                <textarea name="prompt" required rows={3} placeholder="프롬프트 입력..." className="w-full bg-zinc-800 text-sm text-zinc-200 rounded-lg px-3 py-2 outline-none resize-none placeholder:text-zinc-600" />
+                <label className="text-xs text-zinc-500 block mb-1">
+                  Prompt *
+                  {uploadForm.prompt && <span className="ml-2 text-green-500">✓ 자동 감지됨</span>}
+                </label>
+                <textarea required rows={3} placeholder="프롬프트 입력..." value={uploadForm.prompt} onChange={e => setUploadForm(f => ({...f, prompt: e.target.value}))} className="w-full bg-zinc-800 text-sm text-zinc-200 rounded-lg px-3 py-2 outline-none resize-none placeholder:text-zinc-600" />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs text-zinc-500 block mb-1">모델 *</label>
-                  <input name="model" required placeholder="Flux Dev, SDXL..." className="w-full bg-zinc-800 text-sm text-zinc-200 rounded-lg px-3 py-2 outline-none placeholder:text-zinc-600" />
+                  <label className="text-xs text-zinc-500 block mb-1">
+                    모델 *
+                    {uploadForm.model && <span className="ml-2 text-green-500">✓</span>}
+                  </label>
+                  <input required placeholder="Flux Dev, SDXL..." value={uploadForm.model} onChange={e => setUploadForm(f => ({...f, model: e.target.value}))} className="w-full bg-zinc-800 text-sm text-zinc-200 rounded-lg px-3 py-2 outline-none placeholder:text-zinc-600" />
                 </div>
                 <div>
                   <label className="text-xs text-zinc-500 block mb-1">카테고리</label>
-                  <select name="category" className="w-full bg-zinc-800 text-sm text-zinc-200 rounded-lg px-3 py-2 outline-none">
+                  <select value={uploadForm.category} onChange={e => setUploadForm(f => ({...f, category: e.target.value}))} className="w-full bg-zinc-800 text-sm text-zinc-200 rounded-lg px-3 py-2 outline-none">
                     <option value="etc">기타</option>
                     <option value="portrait">인물</option>
                     <option value="product">제품</option>
@@ -293,7 +348,7 @@ export default function Home() {
               </div>
               <div>
                 <label className="text-xs text-zinc-500 block mb-1">Negative Prompt</label>
-                <input name="negative_prompt" placeholder="네거티브 프롬프트..." className="w-full bg-zinc-800 text-sm text-zinc-200 rounded-lg px-3 py-2 outline-none placeholder:text-zinc-600" />
+                <input placeholder="네거티브 프롬프트..." value={uploadForm.negative_prompt} onChange={e => setUploadForm(f => ({...f, negative_prompt: e.target.value}))} className="w-full bg-zinc-800 text-sm text-zinc-200 rounded-lg px-3 py-2 outline-none placeholder:text-zinc-600" />
               </div>
               <div>
                 <label className="text-xs text-zinc-500 block mb-1">
@@ -301,7 +356,6 @@ export default function Home() {
                   {comfyJson && <span className="ml-2 text-green-500">✓ 자동 감지됨</span>}
                 </label>
                 <textarea
-                  name="comfy_settings"
                   rows={2}
                   value={comfyJson}
                   onChange={e => setComfyJson(e.target.value)}
@@ -311,7 +365,7 @@ export default function Home() {
               </div>
               <div>
                 <label className="text-xs text-zinc-500 block mb-1">Notes</label>
-                <input name="notes" placeholder="메모..." className="w-full bg-zinc-800 text-sm text-zinc-200 rounded-lg px-3 py-2 outline-none placeholder:text-zinc-600" />
+                <input placeholder="메모..." value={uploadForm.notes} onChange={e => setUploadForm(f => ({...f, notes: e.target.value}))} className="w-full bg-zinc-800 text-sm text-zinc-200 rounded-lg px-3 py-2 outline-none placeholder:text-zinc-600" />
               </div>
               <button type="submit" disabled={uploading} className="w-full py-2 bg-white text-black text-sm font-semibold rounded-lg hover:bg-zinc-200 transition-colors disabled:opacity-50">
                 {uploading ? '업로드 중...' : '저장'}
