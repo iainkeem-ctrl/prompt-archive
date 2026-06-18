@@ -64,6 +64,9 @@ export default function Home() {
 
   const [selectMode, setSelectMode] = useState(false);
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
+  const [dragRect, setDragRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+  const dragStart = useRef<{ x: number; y: number } | null>(null);
+  const mainRef = useRef<HTMLDivElement>(null);
   const [bulkCategory, setBulkCategory] = useState('');
 
   const toggleCheck = (id: string) => setCheckedIds(prev => {
@@ -71,6 +74,40 @@ export default function Home() {
     next.has(id) ? next.delete(id) : next.add(id);
     return next;
   });
+
+  const onMainMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    if ((e.target as HTMLElement).closest('[data-entry-id]')) return;
+    if (e.button !== 0) return;
+    dragStart.current = { x: e.clientX, y: e.clientY };
+    setDragRect({ x: e.clientX, y: e.clientY, w: 0, h: 0 });
+  };
+
+  const onMainMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!dragStart.current) return;
+    const sx = dragStart.current.x, sy = dragStart.current.y;
+    setDragRect({
+      x: Math.min(sx, e.clientX), y: Math.min(sy, e.clientY),
+      w: Math.abs(e.clientX - sx), h: Math.abs(e.clientY - sy),
+    });
+  };
+
+  const onMainMouseUp = () => {
+    if (!dragStart.current || !dragRect) { dragStart.current = null; setDragRect(null); return; }
+    if (dragRect.w > 5 || dragRect.h > 5) {
+      const cards = document.querySelectorAll<HTMLElement>('[data-entry-id]');
+      const sel = new Set(checkedIds);
+      cards.forEach(card => {
+        const r = card.getBoundingClientRect();
+        const overlaps = r.left < dragRect.x + dragRect.w && r.right > dragRect.x &&
+                         r.top < dragRect.y + dragRect.h && r.bottom > dragRect.y;
+        if (overlaps) sel.add(card.dataset.entryId!);
+      });
+      if (sel.size > 0) setSelectMode(true);
+      setCheckedIds(sel);
+    }
+    dragStart.current = null;
+    setDragRect(null);
+  };
 
   const bulkDelete = async () => {
     if (!confirm(`${checkedIds.size}개 삭제할까요?`)) return;
@@ -477,7 +514,19 @@ export default function Home() {
         </select>
       </div>
 
-      <main className="p-6">
+      <main
+        ref={mainRef}
+        className="p-6 relative"
+        onMouseDown={onMainMouseDown}
+        onMouseMove={onMainMouseMove}
+        onMouseUp={onMainMouseUp}
+        onMouseLeave={onMainMouseUp}
+        style={{ userSelect: dragRect ? 'none' : undefined }}
+      >
+        {dragRect && dragRect.w > 2 && (
+          <div className="fixed pointer-events-none z-40 border border-white/60 bg-white/10 rounded"
+            style={{ left: dragRect.x, top: dragRect.y, width: dragRect.w, height: dragRect.h }} />
+        )}
         {entries.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-64 text-zinc-600">
             <p className="text-lg">아직 아카이브가 없어요</p>
@@ -490,6 +539,7 @@ export default function Home() {
               return (
                 <div
                   key={entry.id}
+                  data-entry-id={entry.id}
                   onClick={() => selectMode ? toggleCheck(entry.id) : setSelected(entry)}
                   className={`break-inside-avoid cursor-pointer group rounded-lg overflow-hidden bg-zinc-900 transition-all ${selectMode && checked ? 'ring-2 ring-white' : ''}`}
                 >
