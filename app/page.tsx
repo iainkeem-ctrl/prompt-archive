@@ -549,11 +549,11 @@ export default function Home() {
                   onClick={() => selectMode ? toggleCheck(entry.id) : setSelected(entry)}
                   className={`cursor-pointer group rounded-lg overflow-hidden bg-zinc-900 transition-all ${selectMode && checked ? 'ring-2 ring-white' : ''}`}
                 >
-                  <div className="relative">
+                  <div className="relative aspect-square">
                     <img
                       src={entry.image_path}
                       alt={entry.prompt.slice(0, 40)}
-                      className={`w-full object-cover transition-opacity ${selectMode && !checked ? 'opacity-60' : 'group-hover:opacity-80'}`}
+                      className={`w-full h-full object-cover transition-opacity ${selectMode && !checked ? 'opacity-60' : 'group-hover:opacity-80'}`}
                     />
                     {selectMode && (
                       <div className="absolute top-2 left-2">
