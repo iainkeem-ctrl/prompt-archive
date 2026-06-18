@@ -771,9 +771,9 @@ export default function Home() {
               </div>
               <button onClick={() => { setSelected(null); setEditing(false); }} className="text-zinc-500 hover:text-white text-lg leading-none">×</button>
             </div>
-            <div className="flex gap-4 p-5">
-              <img src={selected.image_path} alt="" className="w-64 h-auto object-cover rounded-lg flex-shrink-0" />
-              <div className="flex-1 min-w-0 space-y-3">
+            <div className="flex flex-col gap-4 p-5">
+              <img src={selected.image_path} alt="" className="w-full max-h-[60vh] object-contain rounded-lg bg-zinc-800" />
+              <div className="space-y-3">
                 <div className="flex gap-2 flex-wrap">
                   {editing ? (
                     <>
