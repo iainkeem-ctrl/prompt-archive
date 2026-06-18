@@ -734,9 +734,10 @@ export default function Home() {
                 <div className="space-y-3">
                   <p className="text-xs text-zinc-500">레퍼런스 사진을 업로드하면 아카이브 프롬프트 노하우를 참고해 비슷한 인물 프롬프트를 생성합니다.</p>
                   <div
-                    onDragOver={e => e.preventDefault()}
+                    onDragOver={e => { e.preventDefault(); e.stopPropagation(); }}
                     onDrop={async e => {
                       e.preventDefault();
+                      e.stopPropagation();
                       const f = e.dataTransfer.files[0];
                       if (!f || !f.type.startsWith('image/')) return;
                       const compressed = await compressImage(f);
