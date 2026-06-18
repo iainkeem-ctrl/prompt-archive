@@ -6,7 +6,7 @@ export async function GET() {
     const sql = getDb();
     const byHash = await sql`
       SELECT
-        trim(prompt) as key_prompt,
+        min(trim(prompt)) as key_prompt,
         array_agg(id ORDER BY created_at ASC) as ids,
         array_agg(image_path ORDER BY created_at ASC) as image_paths,
         array_agg(model ORDER BY created_at ASC) as models,
