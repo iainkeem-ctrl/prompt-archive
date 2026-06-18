@@ -59,7 +59,7 @@ export default function Home() {
   const [previewFile, setPreviewFile] = useState<File | null>(null);
   const [comfyJson, setComfyJson] = useState('');
   const [uploadForm, setUploadForm] = useState({ prompt: '', model: '', negative_prompt: '', category: 'etc', notes: '' });
-  const [batchProgress, setBatchProgress] = useState<{ total: number; done: number; current: string } | null>(null);
+  const [batchProgress, setBatchProgress] = useState<{ total: number; done: number; current: string; log: {name: string; status: 'pending'|'done'|'error'}[] } | null>(null);
   const [pagedragOver, setPageDragOver] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
@@ -234,13 +234,22 @@ export default function Home() {
     const images = files.filter(f => f.type.startsWith('image/') || /\.(png|jpg|jpeg|webp|gif)$/i.test(f.name));
     if (images.length === 0) return;
     if (images.length === 1) { setShowUpload(true); handleFilePick(images[0]); return; }
-    setBatchProgress({ total: images.length, done: 0, current: images[0].name });
+    const log = images.map(f => ({ name: f.name, status: 'pending' as const }));
+    setBatchProgress({ total: images.length, done: 0, current: images[0].name, log });
     for (let i = 0; i < images.length; i++) {
-      setBatchProgress({ total: images.length, done: i, current: images[i].name });
-      try { await uploadFileDirect(images[i]); } catch { /* continue on error */ }
+      const updatedLog = [...log];
+      setBatchProgress(p => p ? { ...p, done: i, current: images[i].name } : p);
+      try {
+        await uploadFileDirect(images[i]);
+        updatedLog[i] = { ...updatedLog[i], status: 'done' };
+      } catch {
+        updatedLog[i] = { ...updatedLog[i], status: 'error' };
+      }
+      log[i] = updatedLog[i];
+      setBatchProgress(p => p ? { ...p, done: i + 1, log: [...log] } : p);
     }
-    setBatchProgress(null);
     fetchEntries();
+    setTimeout(() => setBatchProgress(null), 2000);
   };
 
   const resetUploadModal = () => {
@@ -300,11 +309,25 @@ export default function Home() {
       </div>
     )}
     {batchProgress && (
-      <div className="fixed bottom-6 right-6 z-50 bg-zinc-800 border border-zinc-700 rounded-xl px-5 py-4 shadow-xl min-w-64">
-        <div className="text-xs text-zinc-400 mb-2">업로드 중 {batchProgress.done}/{batchProgress.total}</div>
-        <div className="text-sm text-zinc-200 truncate mb-2">{batchProgress.current}</div>
-        <div className="w-full bg-zinc-700 rounded-full h-1.5">
-          <div className="bg-white h-1.5 rounded-full transition-all" style={{ width: `${(batchProgress.done / batchProgress.total) * 100}%` }} />
+      <div className="fixed bottom-6 right-6 z-50 bg-zinc-900 border border-zinc-700 rounded-xl px-5 py-4 shadow-xl w-72">
+        <div className="flex items-center justify-between mb-3">
+          <span className="text-xs font-semibold text-zinc-300">배치 업로드</span>
+          <span className="text-xs text-zinc-500">{batchProgress.done}/{batchProgress.total}</span>
+        </div>
+        <div className="w-full bg-zinc-700 rounded-full h-1 mb-3">
+          <div className="bg-white h-1 rounded-full transition-all duration-300" style={{ width: `${(batchProgress.done / batchProgress.total) * 100}%` }} />
+        </div>
+        <div className="space-y-1.5 max-h-48 overflow-y-auto">
+          {batchProgress.log.map((item, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <span className="text-sm flex-shrink-0">
+                {item.status === 'done' ? '✓' : item.status === 'error' ? '✗' : '·'}
+              </span>
+              <span className={`text-xs truncate ${item.status === 'done' ? 'text-zinc-400' : item.status === 'error' ? 'text-red-400' : 'text-zinc-200'}`}>
+                {item.name}
+              </span>
+            </div>
+          ))}
         </div>
       </div>
     )}
