@@ -59,6 +59,8 @@ export default function Home() {
   const [previewFile, setPreviewFile] = useState<File | null>(null);
   const [comfyJson, setComfyJson] = useState('');
   const [uploadForm, setUploadForm] = useState({ prompt: '', model: '', negative_prompt: '', category: 'etc', notes: '' });
+  const [batchProgress, setBatchProgress] = useState<{ total: number; done: number; current: string } | null>(null);
+  const [pagedragOver, setPageDragOver] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
 
@@ -196,6 +198,51 @@ export default function Home() {
     if (file && file.type.startsWith('image/')) handleFilePick(file);
   };
 
+  const uploadFileDirect = async (file: File) => {
+    const compressed = await compressImage(file);
+    let positive = '', negative = '', model = '', ksamplerStr = '';
+    if (file.name.endsWith('.png')) {
+      const meta = await extractPngMeta(file);
+      for (const raw of [meta.prompt, meta.workflow]) {
+        if (!raw) continue;
+        try {
+          const parsed = JSON.parse(raw);
+          const info = parseComfyInfo(parsed);
+          if (info.positive || info.model) {
+            positive = info.positive;
+            negative = info.negative;
+            model = info.model;
+            ksamplerStr = Object.keys(info.ksampler).length > 0 ? JSON.stringify(info.ksampler) : '';
+            break;
+          }
+        } catch { /* ignore */ }
+      }
+    }
+    const fd = new FormData();
+    fd.set('image', compressed);
+    fd.set('prompt', positive || '(no prompt)');
+    fd.set('model', model || 'unknown');
+    fd.set('negative_prompt', negative);
+    fd.set('category', 'etc');
+    fd.set('comfy_settings', ksamplerStr);
+    fd.set('notes', '');
+    const res = await fetch('/api/upload', { method: 'POST', body: fd });
+    if (!res.ok) throw new Error(await res.text());
+  };
+
+  const handleBatchDrop = async (files: File[]) => {
+    const images = files.filter(f => f.type.startsWith('image/'));
+    if (images.length === 0) return;
+    if (images.length === 1) { setShowUpload(true); handleFilePick(images[0]); return; }
+    setBatchProgress({ total: images.length, done: 0, current: images[0].name });
+    for (let i = 0; i < images.length; i++) {
+      setBatchProgress({ total: images.length, done: i, current: images[i].name });
+      try { await uploadFileDirect(images[i]); } catch { /* continue on error */ }
+    }
+    setBatchProgress(null);
+    fetchEntries();
+  };
+
   const resetUploadModal = () => {
     setPreviewFile(null);
     setComfyJson('');
@@ -241,7 +288,26 @@ export default function Home() {
   useEffect(() => { fetchEntries(); }, [filterModel, filterCategory, sort]);
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-white">
+    <div
+      className={`min-h-screen bg-zinc-950 text-white relative ${pagedragOver ? 'ring-2 ring-inset ring-white/30' : ''}`}
+      onDragOver={e => { e.preventDefault(); setPageDragOver(true); }}
+      onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setPageDragOver(false); }}
+      onDrop={e => { e.preventDefault(); setPageDragOver(false); const files = Array.from(e.dataTransfer.files); handleBatchDrop(files); }}
+    >
+    {pagedragOver && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 pointer-events-none">
+        <div className="text-white text-2xl font-semibold">이미지를 여기에 놓으세요</div>
+      </div>
+    )}
+    {batchProgress && (
+      <div className="fixed bottom-6 right-6 z-50 bg-zinc-800 border border-zinc-700 rounded-xl px-5 py-4 shadow-xl min-w-64">
+        <div className="text-xs text-zinc-400 mb-2">업로드 중 {batchProgress.done}/{batchProgress.total}</div>
+        <div className="text-sm text-zinc-200 truncate mb-2">{batchProgress.current}</div>
+        <div className="w-full bg-zinc-700 rounded-full h-1.5">
+          <div className="bg-white h-1.5 rounded-full transition-all" style={{ width: `${(batchProgress.done / batchProgress.total) * 100}%` }} />
+        </div>
+      </div>
+    )}
       <header className="border-b border-zinc-800 px-6 py-4 flex items-center justify-between">
         <h1 className="text-xl font-bold tracking-tight">Prompt Archive</h1>
         <div className="flex items-center gap-3">
