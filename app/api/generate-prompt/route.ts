@@ -24,18 +24,32 @@ export async function POST(req: NextRequest) {
     let userMsg = '';
 
     if (mode === 'avatar') {
+      const av = (k: string) => {
+        const v = avatar[k];
+        if (!v) return null;
+        if (Array.isArray(v)) return v.length ? v.join(', ') : null;
+        return v || null;
+      };
       const specs = [
-        avatar.gender && `성별: ${avatar.gender}`,
-        avatar.age && `나이대: ${avatar.age}`,
-        avatar.hair_style && `헤어스타일: ${avatar.hair_style}`,
-        avatar.hair_color && `헤어컬러: ${avatar.hair_color}`,
-        avatar.skin_tone && `피부톤: ${avatar.skin_tone}`,
-        avatar.eyes && `눈: ${avatar.eyes}`,
-        avatar.nose && `코: ${avatar.nose}`,
-        avatar.lips && `입: ${avatar.lips}`,
-        avatar.face_shape && `얼굴형: ${avatar.face_shape}`,
-        avatar.style && `스타일/분위기: ${avatar.style}`,
-        avatar.extra && `추가 요청: ${avatar.extra}`,
+        av('gender') && `성별: ${av('gender')}`,
+        av('ethnicity') && `인종: ${av('ethnicity')}`,
+        av('age') && `나이: ${av('age')}세`,
+        av('face_shape') && `얼굴형: ${av('face_shape')}`,
+        av('skin_tone') && `피부톤: ${av('skin_tone')}`,
+        av('skin_detail') && `피부 특징: ${av('skin_detail')}`,
+        av('eyes_shape') && `눈 모양: ${av('eyes_shape')}`,
+        av('eyes_color') && `눈 색: ${av('eyes_color')}`,
+        av('nose') && `코: ${av('nose')}`,
+        av('lips') && `입술: ${av('lips')}`,
+        av('hair_style') && `헤어스타일: ${av('hair_style')}`,
+        av('hair_color') && `헤어컬러: ${av('hair_color')}`,
+        av('expression') && `표정: ${av('expression')}`,
+        av('shot') && `구도: ${av('shot')}`,
+        av('pose') && `자세: ${av('pose')}`,
+        av('background') && `배경: ${av('background')}`,
+        av('lighting') && `조명: ${av('lighting')}`,
+        av('style') && `스타일/무드: ${av('style')}`,
+        av('extra') && `추가 요청: ${av('extra')}`,
       ].filter(Boolean).join('\n');
 
       userMsg = `아카이브 프롬프트 패턴을 참고해서, 아래 인물 스펙에 맞는 AI 이미지 생성 프롬프트를 작성해줘.\n\n[인물 스펙]\n${specs}`;

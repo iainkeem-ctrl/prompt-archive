@@ -73,8 +73,16 @@ export default function Home() {
   const [genInstruction, setGenInstruction] = useState('');
   const [showGenModal, setShowGenModal] = useState(false);
   const [genTab, setGenTab] = useState<'reference' | 'avatar'>('reference');
-  const [avatar, setAvatar] = useState({ gender: '', ethnicity: '', age: '', face_shape: '', skin_tone: '', skin_detail: '', eyes_shape: '', eyes_color: '', nose: '', lips: '', hair_style: '', hair_color: '', expression: '', shot: '', background: '', lighting: '', style: '', extra: '' });
-  const setAv = (k: string, v: string) => setAvatar(a => ({ ...a, [k]: v === a[k as keyof typeof a] ? '' : v }));
+  const AVATAR_MULTI_KEYS = ['skin_detail', 'pose', 'style'];
+  const [avatar, setAvatar] = useState<Record<string, string | string[]>>({ gender: '', ethnicity: '', age: '', face_shape: '', skin_tone: '', skin_detail: [] as string[], eyes_shape: '', eyes_color: '', nose: '', lips: '', hair_style: '', hair_color: '', expression: '', shot: '', pose: [] as string[], background: '', lighting: '', style: [] as string[], extra: '' });
+  const setAv = (k: string, v: string) => setAvatar(a => {
+    if (AVATAR_MULTI_KEYS.includes(k)) {
+      const arr = (a[k] as string[]);
+      return { ...a, [k]: arr.includes(v) ? arr.filter(x => x !== v) : [...arr, v] };
+    }
+    return { ...a, [k]: v === a[k] ? '' : v };
+  });
+  const isAvSelected = (k: string, v: string) => AVATAR_MULTI_KEYS.includes(k) ? (avatar[k] as string[]).includes(v) : avatar[k] === v;
 
   const toggleCheck = (id: string) => setCheckedIds(prev => {
     const next = new Set(prev);
@@ -724,31 +732,35 @@ export default function Home() {
               {genTab === 'avatar' && !genResult && !generating && (
                 <div className="space-y-4">
                   <p className="text-xs text-zinc-500">인물 특성을 선택하면 아카이브 스타일로 프롬프트를 생성합니다. 선택 안 해도 됩니다.</p>
+                  <div>
+                    <p className="text-xs text-zinc-500 mb-1.5">나이대</p>
+                    <input type="number" min={1} max={99} value={avatar.age as string} onChange={e => setAvatar(a => ({ ...a, age: e.target.value }))} placeholder="예: 25" className="w-24 bg-zinc-800 text-sm text-zinc-200 rounded-lg px-3 py-1.5 outline-none placeholder:text-zinc-600" />
+                  </div>
                   {([
-                    { key: 'gender', label: '성별', options: ['여성', '남성', '중성적'] },
+                    { key: 'gender', label: '성별', options: ['여성', '남성'] },
                     { key: 'ethnicity', label: '인종', options: ['한국인', '동아시아', '동남아시아', '남아시아', '백인', '흑인', '히스패닉', '중동', '혼혈'] },
-                    { key: 'age', label: '나이대', options: ['10대', '20대 초반', '20대 후반', '30대 초반', '30대 후반', '40대', '50대+'] },
                     { key: 'face_shape', label: '얼굴형', options: ['계란형', '둥근형', '각진형', '하트형', '긴형', '다이아몬드형'] },
                     { key: 'skin_tone', label: '피부톤', options: ['백옥', '아이보리', '베이지', '웜 베이지', '올리브', '탠', '카라멜', '다크브라운'] },
-                    { key: 'skin_detail', label: '피부 특징', options: ['클린 스킨', '주근깨', '뷰티마크', '자연 포어', '글로우 스킨', '매트 스킨', '데우이 스킨'] },
-                    { key: 'eyes_shape', label: '눈 모양', options: ['아몬드형', '라운드형', '업스윕', '다운터닝', '모노리드', '더블리드', '고양이눈', '처진눈'] },
+                    { key: 'skin_detail', label: '피부 특징 (복수선택)', options: ['클린 스킨', '주근깨', '뷰티마크', '자연 포어', '글로우 스킨', '매트 스킨', '데우이 스킨'] },
+                    { key: 'eyes_shape', label: '눈 모양', options: ['아몬드형', '라운드형', '올라간 눈꼬리', '내려간 눈꼬리', '외꺼풀', '쌍꺼풀', '고양이눈', '순한 눈'] },
                     { key: 'eyes_color', label: '눈 색', options: ['블랙', '다크브라운', '브라운', '헤이즐', '그린', '블루', '그레이'] },
-                    { key: 'nose', label: '코', options: ['오똑한 코', '버튼 노즈', '자연스러운', '작고 오똑한', '넓고 자연스러운', '좁고 긴'] },
+                    { key: 'nose', label: '코', options: ['오똑한 코', '작은 코', '자연스러운', '작고 오똑한', '넓고 자연스러운', '좁고 긴'] },
                     { key: 'lips', label: '입술', options: ['풍성한 입술', '얇은 입술', '쿠피드 보우', '라운드형', '자연스러운', '작고 도톰한', '넓고 얇은'] },
                     { key: 'hair_style', label: '헤어스타일', options: ['긴 스트레이트', '긴 웨이브', '중단발', '단발 보브', '숏 보브', '픽시컷', '업스타일 번', '포니테일', '사이드스윕', '센터파트'] },
                     { key: 'hair_color', label: '헤어컬러', options: ['블랙', '다크브라운', '미디엄브라운', '오번', '블론드', '플래티넘 블론드', '레드', '그레이', '실버', '하이라이트'] },
                     { key: 'expression', label: '표정', options: ['무표정', '자연스러운 미소', '환한 미소', '자신감 있는', '우아한', '강렬한'] },
                     { key: 'shot', label: '구도', options: ['클로즈업 페이스', '헤드샷', '상반신', '3/4 앵글', '프로필(측면)', '풀바디'] },
+                    { key: 'pose', label: '자세 (복수선택)', options: ['정면', '살짝 돌아봄', '어깨 드롭', '손 얼굴 근처', '팔짱', '손 허리', '기댄 자세', '앉은 자세', '뒤돌아봄', '걷는 자세'] },
                     { key: 'background', label: '배경', options: ['화이트 호리존', '블랙 시임리스', '그레이 그라디언트', '소프트 베이지', '자연/야외', '도시 거리', '스튜디오 웜', '스튜디오 쿨', '보케 블러', '미니멀 컬러'] },
                     { key: 'lighting', label: '조명', options: ['하이키 에벤 라이트', '소프트 박스', '자연광 윈도우', '골든아워', '림라이트', '버터플라이', '렘브란트', '드라마틱 사이드'] },
-                    { key: 'style', label: '스타일/무드', options: ['K-뷰티 에디토리얼', '하이패션', '자연스러운 미니멀', '커머셜 뷰티', '럭셔리', '스트릿', '프로페셔널'] },
+                    { key: 'style', label: '스타일/무드 (복수선택)', options: ['K-뷰티 에디토리얼', '하이패션', '자연스러운 미니멀', '커머셜 뷰티', '럭셔리', '스트릿', '프로페셔널'] },
                   ] as { key: string; label: string; options: string[] }[]).map(({ key, label, options }) => (
                     <div key={key}>
                       <p className="text-xs text-zinc-500 mb-1.5">{label}</p>
                       <div className="flex gap-1.5 flex-wrap">
                         {options.map(opt => (
                           <button key={opt} onClick={() => setAv(key, opt)}
-                            className={`px-2.5 py-1 rounded-full text-xs transition-colors ${avatar[key as keyof typeof avatar] === opt ? 'bg-white text-black font-semibold' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'}`}>
+                            className={`px-2.5 py-1 rounded-full text-xs transition-colors ${isAvSelected(key, opt) ? 'bg-white text-black font-semibold' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'}`}>
                             {opt}
                           </button>
                         ))}
