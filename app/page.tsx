@@ -136,11 +136,33 @@ export default function Home() {
     return { positive: '', negative: '', model: '', ksampler: {} };
   };
 
+  const compressImage = (file: File): Promise<File> =>
+    new Promise(resolve => {
+      const MAX = 4 * 1024 * 1024;
+      if (file.size <= MAX) { resolve(file); return; }
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        const scale = Math.min(1, Math.sqrt(MAX / file.size));
+        const w = Math.round(img.width * scale);
+        const h = Math.round(img.height * scale);
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d')!.drawImage(img, 0, 0, w, h);
+        canvas.toBlob(blob => {
+          resolve(blob ? new File([blob], file.name.replace(/\.png$/i, '.jpg'), { type: 'image/jpeg' }) : file);
+        }, 'image/jpeg', 0.88);
+      };
+      img.src = url;
+    });
+
   const handleFilePick = async (file: File) => {
-    setPreviewFile(file);
+    const compressed = await compressImage(file);
+    setPreviewFile(compressed);
     if (fileRef.current) {
       const dt = new DataTransfer();
-      dt.items.add(file);
+      dt.items.add(compressed);
       fileRef.current.files = dt.files;
     }
     if (file.name.endsWith('.png')) {
