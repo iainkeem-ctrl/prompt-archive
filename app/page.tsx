@@ -59,7 +59,8 @@ export default function Home() {
   const [previewFile, setPreviewFile] = useState<File | null>(null);
   const [comfyJson, setComfyJson] = useState('');
   const [uploadForm, setUploadForm] = useState({ prompt: '', model: '', negative_prompt: '', category: 'etc', notes: '' });
-  const [batchProgress, setBatchProgress] = useState<{ total: number; done: number; current: string; log: {name: string; status: 'pending'|'done'|'error'}[] } | null>(null);
+  type BatchLog = { name: string; status: 'pending' | 'done' | 'error' };
+  const [batchProgress, setBatchProgress] = useState<{ total: number; done: number; current: string; log: BatchLog[] } | null>(null);
   const [pagedragOver, setPageDragOver] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
@@ -234,18 +235,17 @@ export default function Home() {
     const images = files.filter(f => f.type.startsWith('image/') || /\.(png|jpg|jpeg|webp|gif)$/i.test(f.name));
     if (images.length === 0) return;
     if (images.length === 1) { setShowUpload(true); handleFilePick(images[0]); return; }
-    const log = images.map(f => ({ name: f.name, status: 'pending' as const }));
+    type LogItem = { name: string; status: 'pending' | 'done' | 'error' };
+    const log: LogItem[] = images.map(f => ({ name: f.name, status: 'pending' }));
     setBatchProgress({ total: images.length, done: 0, current: images[0].name, log });
     for (let i = 0; i < images.length; i++) {
-      const updatedLog = [...log];
       setBatchProgress(p => p ? { ...p, done: i, current: images[i].name } : p);
       try {
         await uploadFileDirect(images[i]);
-        updatedLog[i] = { name: updatedLog[i].name, status: 'done' as const };
+        log[i] = { name: log[i].name, status: 'done' };
       } catch {
-        updatedLog[i] = { name: updatedLog[i].name, status: 'error' as const };
+        log[i] = { name: log[i].name, status: 'error' };
       }
-      log[i] = updatedLog[i];
       setBatchProgress(p => p ? { ...p, done: i + 1, log: [...log] } : p);
     }
     fetchEntries();
