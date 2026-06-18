@@ -12,7 +12,7 @@ export async function GET() {
       array_agg(created_at::text ORDER BY created_at ASC) as dates,
       count(*)::int as cnt
     FROM entries
-    GROUP BY trim(prompt)
+    GROUP BY trim(prompt), trim(model), coalesce(trim(comfy_settings), '')
     HAVING count(*) > 1
     ORDER BY count(*) DESC
   `;
