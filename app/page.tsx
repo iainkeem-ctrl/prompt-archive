@@ -72,6 +72,9 @@ export default function Home() {
   const [genResult, setGenResult] = useState<{ prompt: string; negative_prompt: string } | null>(null);
   const [genInstruction, setGenInstruction] = useState('');
   const [showGenModal, setShowGenModal] = useState(false);
+  const [genTab, setGenTab] = useState<'reference' | 'avatar'>('reference');
+  const [avatar, setAvatar] = useState({ gender: '', age: '', hair_style: '', hair_color: '', skin_tone: '', eyes: '', nose: '', lips: '', face_shape: '', style: '', extra: '' });
+  const setAv = (k: string, v: string) => setAvatar(a => ({ ...a, [k]: v }));
 
   const toggleCheck = (id: string) => setCheckedIds(prev => {
     const next = new Set(prev);
@@ -378,24 +381,24 @@ export default function Home() {
     }
   };
 
-  const generatePrompt = async () => {
-    const selected = entries.filter(e => checkedIds.has(e.id));
-    if (selected.length === 0) return;
+  const generatePrompt = async (mode: 'reference' | 'avatar' = 'reference') => {
     setGenerating(true);
     setGenResult(null);
-    setShowGenModal(true);
     try {
+      const selected = entries.filter(e => checkedIds.has(e.id));
+      const body = mode === 'avatar'
+        ? { mode: 'avatar', avatar }
+        : { mode: 'reference', entries: selected, instruction: genInstruction };
       const res = await fetch('/api/generate-prompt', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ entries: selected, instruction: genInstruction }),
+        body: JSON.stringify(body),
       });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
       setGenResult({ prompt: data.prompt, negative_prompt: data.negative_prompt });
     } catch (e) {
       alert('생성 실패: ' + e);
-      setShowGenModal(false);
     } finally {
       setGenerating(false);
     }
@@ -494,6 +497,12 @@ export default function Home() {
             <span className="text-xs text-zinc-600">⊞</span>
           </div>
           <span className="text-zinc-500 text-sm">{entries.length} entries</span>
+          <button
+            onClick={() => { setShowGenModal(true); setGenResult(null); setGenTab('reference'); }}
+            className="px-3 py-1.5 bg-indigo-600 text-white text-xs font-semibold rounded-full hover:bg-indigo-500 transition-colors"
+          >
+            ✦ 프롬프트 생성
+          </button>
           <button
             onClick={() => { setSelectMode(v => !v); setCheckedIds(new Set()); }}
             className={`px-3 py-1.5 text-xs font-semibold rounded-full transition-colors ${selectMode ? 'bg-white text-black' : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'}`}
@@ -693,48 +702,89 @@ export default function Home() {
 
       {showGenModal && (
         <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4" onClick={() => !generating && setShowGenModal(false)}>
-          <div className="bg-zinc-900 rounded-xl w-full max-w-2xl max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800">
-              <h2 className="font-semibold text-sm">✦ AI 프롬프트 생성</h2>
+          <div className="bg-zinc-900 rounded-xl w-full max-w-2xl max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800 flex-shrink-0">
+              <div className="flex gap-1">
+                <button onClick={() => { setGenTab('reference'); setGenResult(null); }} className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors ${genTab === 'reference' ? 'bg-white text-black' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'}`}>레퍼런스 기반</button>
+                <button onClick={() => { setGenTab('avatar'); setGenResult(null); }} className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors ${genTab === 'avatar' ? 'bg-white text-black' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'}`}>아바타 빌더</button>
+              </div>
               {!generating && <button onClick={() => setShowGenModal(false)} className="text-zinc-500 hover:text-white text-lg">×</button>}
             </div>
-            <div className="p-5 space-y-4 overflow-y-auto">
-              {generating && (
-                <div className="flex items-center gap-3 text-zinc-400 py-8 justify-center">
-                  <div className="w-4 h-4 border-2 border-zinc-600 border-t-white rounded-full animate-spin" />
-                  <span className="text-sm">레퍼런스 분석 중...</span>
+            <div className="p-5 space-y-4 overflow-y-auto flex-1">
+
+              {genTab === 'reference' && !genResult && !generating && (
+                <div className="space-y-3">
+                  <p className="text-xs text-zinc-500">아카이브 프롬프트 패턴을 학습해서 새 프롬프트를 생성합니다. 레퍼런스 이미지를 선택하면 더 정확해집니다.</p>
+                  {checkedIds.size > 0 && <p className="text-xs text-indigo-400">✓ {checkedIds.size}개 레퍼런스 선택됨</p>}
+                  <input value={genInstruction} onChange={e => setGenInstruction(e.target.value)} placeholder="요청사항 (예: 20대 여성, 야외 배경, 자연광...)" className="w-full bg-zinc-800 text-sm text-zinc-200 rounded-lg px-3 py-2 outline-none placeholder:text-zinc-600" />
+                  <button onClick={() => generatePrompt('reference')} className="w-full py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-500">✦ 생성하기</button>
                 </div>
               )}
+
+              {genTab === 'avatar' && !genResult && !generating && (
+                <div className="space-y-3">
+                  <p className="text-xs text-zinc-500">인물 특성을 입력하면 아카이브 스타일로 프롬프트를 생성합니다.</p>
+                  {[
+                    { key: 'gender', label: '성별', options: ['여성', '남성', '중성적'] },
+                    { key: 'age', label: '나이대', options: ['10대', '20대 초반', '20대 후반', '30대', '40대'] },
+                    { key: 'face_shape', label: '얼굴형', options: ['계란형', '둥근형', '각진형', '하트형', '긴형'] },
+                    { key: 'skin_tone', label: '피부톤', options: ['밝은 피부', '중간 피부', '웜톤', '쿨톤'] },
+                    { key: 'eyes', label: '눈', options: ['쌍꺼풀 큰 눈', '외꺼풀', '아몬드형', '고양이 눈', '처진 눈'] },
+                    { key: 'nose', label: '코', options: ['오똑한 코', '자연스러운 코', '작은 코', '넓은 코'] },
+                    { key: 'lips', label: '입술', options: ['얇은 입술', '도톰한 입술', '작은 입술', '넓은 입술'] },
+                    { key: 'hair_style', label: '헤어스타일', options: ['단발', '중단발', '긴머리', '짧은머리', '업스타일', '웨이브'] },
+                    { key: 'hair_color', label: '헤어컬러', options: ['블랙', '브라운', '블론드', '레드', '그레이'] },
+                    { key: 'style', label: '스타일/분위기', options: ['K-뷰티', '하이패션', '자연스러운', '에디토리얼', '미니멀'] },
+                  ].map(({ key, label, options }) => (
+                    <div key={key} className="flex items-center gap-3">
+                      <span className="text-xs text-zinc-500 w-20 flex-shrink-0">{label}</span>
+                      <div className="flex gap-1.5 flex-wrap">
+                        {options.map(opt => (
+                          <button key={opt} onClick={() => setAv(key, avatar[key as keyof typeof avatar] === opt ? '' : opt)}
+                            className={`px-2.5 py-1 rounded-full text-xs transition-colors ${avatar[key as keyof typeof avatar] === opt ? 'bg-white text-black font-semibold' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'}`}>
+                            {opt}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                  <div>
+                    <input value={avatar.extra} onChange={e => setAv('extra', e.target.value)} placeholder="추가 요청 (자유 입력)" className="w-full bg-zinc-800 text-sm text-zinc-200 rounded-lg px-3 py-2 outline-none placeholder:text-zinc-600" />
+                  </div>
+                  <button onClick={() => generatePrompt('avatar')} className="w-full py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-500">✦ 아바타 프롬프트 생성</button>
+                </div>
+              )}
+
+              {generating && (
+                <div className="flex items-center gap-3 text-zinc-400 py-12 justify-center">
+                  <div className="w-4 h-4 border-2 border-zinc-600 border-t-white rounded-full animate-spin" />
+                  <span className="text-sm">아카이브 분석 중...</span>
+                </div>
+              )}
+
               {genResult && (
-                <>
+                <div className="space-y-4">
                   <div>
                     <div className="flex items-center justify-between mb-2">
-                      <label className="text-xs text-zinc-500">Prompt</label>
-                      <button onClick={() => navigator.clipboard.writeText(genResult.prompt)} className="text-xs text-zinc-500 hover:text-white">복사</button>
+                      <label className="text-xs text-zinc-500 font-medium">Prompt</label>
+                      <button onClick={() => navigator.clipboard.writeText(genResult.prompt)} className="text-xs text-zinc-500 hover:text-white px-2 py-0.5 bg-zinc-800 rounded">복사</button>
                     </div>
                     <textarea readOnly value={genResult.prompt} rows={8} className="w-full bg-zinc-800 text-sm text-zinc-200 rounded-lg px-3 py-2 outline-none resize-none" />
                   </div>
                   {genResult.negative_prompt && (
                     <div>
                       <div className="flex items-center justify-between mb-2">
-                        <label className="text-xs text-zinc-500">Negative Prompt</label>
-                        <button onClick={() => navigator.clipboard.writeText(genResult.negative_prompt)} className="text-xs text-zinc-500 hover:text-white">복사</button>
+                        <label className="text-xs text-zinc-500 font-medium">Negative Prompt</label>
+                        <button onClick={() => navigator.clipboard.writeText(genResult.negative_prompt)} className="text-xs text-zinc-500 hover:text-white px-2 py-0.5 bg-zinc-800 rounded">복사</button>
                       </div>
-                      <textarea readOnly value={genResult.negative_prompt} rows={4} className="w-full bg-zinc-800 text-sm text-zinc-400 rounded-lg px-3 py-2 outline-none resize-none" />
+                      <textarea readOnly value={genResult.negative_prompt} rows={3} className="w-full bg-zinc-800 text-sm text-zinc-400 rounded-lg px-3 py-2 outline-none resize-none" />
                     </div>
                   )}
                   <div className="flex gap-2">
-                    <input
-                      value={genInstruction}
-                      onChange={e => setGenInstruction(e.target.value)}
-                      placeholder="추가 요청 (예: 남성 모델로, 야외 배경으로...)"
-                      className="flex-1 bg-zinc-800 text-sm text-zinc-200 rounded-lg px-3 py-2 outline-none placeholder:text-zinc-600"
-                    />
-                    <button onClick={generatePrompt} disabled={generating} className="px-4 py-2 bg-indigo-600 text-white text-xs font-semibold rounded-lg hover:bg-indigo-500 disabled:opacity-50">
-                      재생성
-                    </button>
+                    <button onClick={() => setGenResult(null)} className="flex-1 py-2 bg-zinc-800 text-zinc-300 text-xs font-semibold rounded-lg hover:bg-zinc-700">← 돌아가기</button>
+                    <button onClick={() => generatePrompt(genTab)} disabled={generating} className="flex-1 py-2 bg-indigo-600 text-white text-xs font-semibold rounded-lg hover:bg-indigo-500 disabled:opacity-50">재생성</button>
                   </div>
-                </>
+                </div>
               )}
             </div>
           </div>
@@ -765,7 +815,7 @@ export default function Home() {
             </button>
           </div>
           <div className="w-px h-5 bg-zinc-700" />
-          <button onClick={generatePrompt} disabled={generating} className="px-3 py-1.5 bg-indigo-600 text-white text-xs font-semibold rounded-full hover:bg-indigo-500 disabled:opacity-50 transition-colors">
+          <button onClick={() => generatePrompt('reference')} disabled={generating} className="px-3 py-1.5 bg-indigo-600 text-white text-xs font-semibold rounded-full hover:bg-indigo-500 disabled:opacity-50 transition-colors">
             ✦ 프롬프트 생성
           </button>
           <div className="w-px h-5 bg-zinc-700" />
