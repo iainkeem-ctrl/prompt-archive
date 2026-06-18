@@ -6,7 +6,7 @@ const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 export async function POST(req: NextRequest) {
   try {
-    const { mode, entries, instruction, avatar } = await req.json();
+    const { mode, entries, instruction, avatar, refImageBase64, refMediaType } = await req.json();
     const sql = getDb();
 
     // Fetch archive context (top 30 prompts by model usage)
@@ -54,19 +54,10 @@ export async function POST(req: NextRequest) {
 
       userMsg = `아카이브 프롬프트 패턴을 참고해서, 아래 인물 스펙에 맞는 AI 이미지 생성 프롬프트를 작성해줘.\n\n[인물 스펙]\n${specs}`;
     } else {
-      const refs = (entries || []).map((e: { prompt: string; negative_prompt?: string; model?: string }, i: number) =>
-        `[레퍼런스 ${i + 1}]\nPrompt: ${e.prompt}${e.negative_prompt ? `\nNegative: ${e.negative_prompt}` : ''}${e.model ? `\nModel: ${e.model}` : ''}`
-      ).join('\n\n');
-
-      userMsg = refs
-        ? `다음 레퍼런스들의 스타일을 참고해서 새 프롬프트를 작성해줘.${instruction ? `\n\n추가 요청: ${instruction}` : ''}\n\n${refs}`
-        : `아카이브 프롬프트 패턴을 분석해서 고퀄리티 새 프롬프트를 작성해줘.${instruction ? `\n\n요청: ${instruction}` : ''}`;
+      userMsg = `아카이브 프롬프트 패턴을 분석해서 고퀄리티 새 프롬프트를 작성해줘.${instruction ? `\n\n요청: ${instruction}` : ''}`;
     }
 
-    const msg = await client.messages.create({
-      model: 'claude-opus-4-8',
-      max_tokens: 1500,
-      system: `당신은 AI 이미지 생성(ComfyUI, Stable Diffusion) 전문 프롬프트 엔지니어입니다.
+    const systemPrompt = `당신은 AI 이미지 생성(ComfyUI, Stable Diffusion) 전문 프롬프트 엔지니어입니다.
 아래는 사용자의 프롬프트 아카이브입니다. 이 패턴과 스타일을 학습해서 새 프롬프트를 작성하세요.
 
 [아카이브 패턴]
@@ -79,8 +70,29 @@ ${archiveContext}
 **Negative Prompt:**
 (영어 네거티브 프롬프트)
 
-아카이브의 퀄리티 키워드, 조명, 스타일 패턴을 유지하세요.`,
-      messages: [{ role: 'user', content: userMsg }],
+아카이브의 퀄리티 키워드, 조명, 스타일 패턴을 유지하세요.`;
+
+    let messageContent: Anthropic.MessageParam['content'];
+    if (mode === 'ref_image' && refImageBase64) {
+      messageContent = [
+        {
+          type: 'image',
+          source: { type: 'base64', media_type: refMediaType || 'image/jpeg', data: refImageBase64 },
+        },
+        {
+          type: 'text',
+          text: `위 레퍼런스 사진을 분석해서, 이 인물과 최대한 비슷한 인물이 AI 이미지로 생성될 수 있도록 아카이브 프롬프트 노하우를 적용해 프롬프트를 작성해줘.${instruction ? `\n\n추가 요청: ${instruction}` : ''}\n\n인물의 외모 특징(얼굴형, 피부톤, 눈, 코, 입술, 헤어, 표정, 전체 분위기)을 세밀하게 묘사해서 반영해줘.`,
+        },
+      ];
+    } else {
+      messageContent = userMsg;
+    }
+
+    const msg = await client.messages.create({
+      model: 'claude-opus-4-8',
+      max_tokens: 1500,
+      system: systemPrompt,
+      messages: [{ role: 'user', content: messageContent }],
     });
 
     const text = (msg.content[0] as { type: string; text: string }).text;

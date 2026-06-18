@@ -70,6 +70,7 @@ export default function Home() {
   const [bulkCategory, setBulkCategory] = useState('');
   const [generating, setGenerating] = useState(false);
   const [genResult, setGenResult] = useState<{ prompt: string; negative_prompt: string } | null>(null);
+  const [refImage, setRefImage] = useState<{ file: File; dataUrl: string } | null>(null);
   const [genInstruction, setGenInstruction] = useState('');
   const [showGenModal, setShowGenModal] = useState(false);
   const [genTab, setGenTab] = useState<'reference' | 'avatar'>('reference');
@@ -393,10 +394,16 @@ export default function Home() {
     setGenerating(true);
     setGenResult(null);
     try {
-      const selected = entries.filter(e => checkedIds.has(e.id));
-      const body = mode === 'avatar'
-        ? { mode: 'avatar', avatar }
-        : { mode: 'reference', entries: selected, instruction: genInstruction };
+      let body: Record<string, unknown>;
+      if (mode === 'avatar') {
+        body = { mode: 'avatar', avatar };
+      } else if (refImage) {
+        const base64 = refImage.dataUrl.split(',')[1];
+        const mediaType = refImage.file.type || 'image/jpeg';
+        body = { mode: 'ref_image', refImageBase64: base64, refMediaType: mediaType, instruction: genInstruction };
+      } else {
+        body = { mode: 'reference', instruction: genInstruction };
+      }
       const res = await fetch('/api/generate-prompt', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -506,7 +513,7 @@ export default function Home() {
           </div>
           <span className="text-zinc-500 text-sm">{entries.length} entries</span>
           <button
-            onClick={() => { setShowGenModal(true); setGenResult(null); setGenTab('reference'); }}
+            onClick={() => { setShowGenModal(true); setGenResult(null); setGenTab('reference'); setRefImage(null); }}
             className="px-3 py-1.5 bg-indigo-600 text-white text-xs font-semibold rounded-full hover:bg-indigo-500 transition-colors"
           >
             ✦ 프롬프트 생성
@@ -722,9 +729,35 @@ export default function Home() {
 
               {genTab === 'reference' && !genResult && !generating && (
                 <div className="space-y-3">
-                  <p className="text-xs text-zinc-500">아카이브 프롬프트 패턴을 학습해서 새 프롬프트를 생성합니다. 레퍼런스 이미지를 선택하면 더 정확해집니다.</p>
-                  {checkedIds.size > 0 && <p className="text-xs text-indigo-400">✓ {checkedIds.size}개 레퍼런스 선택됨</p>}
-                  <input value={genInstruction} onChange={e => setGenInstruction(e.target.value)} placeholder="요청사항 (예: 20대 여성, 야외 배경, 자연광...)" className="w-full bg-zinc-800 text-sm text-zinc-200 rounded-lg px-3 py-2 outline-none placeholder:text-zinc-600" />
+                  <p className="text-xs text-zinc-500">레퍼런스 사진을 업로드하면 아카이브 프롬프트 노하우를 참고해 비슷한 인물 프롬프트를 생성합니다.</p>
+                  <div
+                    onDragOver={e => e.preventDefault()}
+                    onDrop={e => {
+                      e.preventDefault();
+                      const f = e.dataTransfer.files[0];
+                      if (!f || !f.type.startsWith('image/')) return;
+                      const reader = new FileReader();
+                      reader.onload = ev => setRefImage({ file: f, dataUrl: ev.target!.result as string });
+                      reader.readAsDataURL(f);
+                    }}
+                    className="relative border-2 border-dashed border-zinc-700 rounded-xl overflow-hidden cursor-pointer hover:border-zinc-500 transition-colors"
+                    style={{ minHeight: refImage ? 'auto' : '120px' }}
+                    onClick={() => { const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*'; inp.onchange = (ev) => { const f = (ev.target as HTMLInputElement).files?.[0]; if (!f) return; const reader = new FileReader(); reader.onload = e2 => setRefImage({ file: f, dataUrl: e2.target!.result as string }); reader.readAsDataURL(f); }; inp.click(); }}
+                  >
+                    {refImage ? (
+                      <div className="relative">
+                        <img src={refImage.dataUrl} alt="ref" className="w-full max-h-64 object-contain bg-zinc-900" />
+                        <button onClick={e => { e.stopPropagation(); setRefImage(null); }} className="absolute top-2 right-2 bg-black/60 text-white rounded-full w-6 h-6 text-xs flex items-center justify-center hover:bg-black">×</button>
+                        <p className="text-xs text-zinc-500 text-center py-1 bg-zinc-900">{refImage.file.name}</p>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center h-28 gap-1.5">
+                        <span className="text-2xl text-zinc-600">↑</span>
+                        <p className="text-xs text-zinc-500">클릭하거나 이미지를 드래그해서 업로드</p>
+                      </div>
+                    )}
+                  </div>
+                  <input value={genInstruction} onChange={e => setGenInstruction(e.target.value)} placeholder="추가 요청사항 (예: 더 밝은 조명, 야외 배경...)" className="w-full bg-zinc-800 text-sm text-zinc-200 rounded-lg px-3 py-2 outline-none placeholder:text-zinc-600" />
                   <button onClick={() => generatePrompt('reference')} className="w-full py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-500">✦ 생성하기</button>
                 </div>
               )}
