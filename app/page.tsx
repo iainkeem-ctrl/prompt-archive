@@ -735,17 +735,18 @@ export default function Home() {
                   <p className="text-xs text-zinc-500">레퍼런스 사진을 업로드하면 아카이브 프롬프트 노하우를 참고해 비슷한 인물 프롬프트를 생성합니다.</p>
                   <div
                     onDragOver={e => e.preventDefault()}
-                    onDrop={e => {
+                    onDrop={async e => {
                       e.preventDefault();
                       const f = e.dataTransfer.files[0];
                       if (!f || !f.type.startsWith('image/')) return;
+                      const compressed = await compressImage(f);
                       const reader = new FileReader();
-                      reader.onload = ev => setRefImage({ file: f, dataUrl: ev.target!.result as string });
-                      reader.readAsDataURL(f);
+                      reader.onload = ev => setRefImage({ file: compressed, dataUrl: ev.target!.result as string });
+                      reader.readAsDataURL(compressed);
                     }}
                     className="relative border-2 border-dashed border-zinc-700 rounded-xl overflow-hidden cursor-pointer hover:border-zinc-500 transition-colors"
                     style={{ minHeight: refImage ? 'auto' : '120px' }}
-                    onClick={() => { const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*'; inp.onchange = (ev) => { const f = (ev.target as HTMLInputElement).files?.[0]; if (!f) return; const reader = new FileReader(); reader.onload = e2 => setRefImage({ file: f, dataUrl: e2.target!.result as string }); reader.readAsDataURL(f); }; inp.click(); }}
+                    onClick={() => { const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*'; inp.onchange = async (ev) => { const f = (ev.target as HTMLInputElement).files?.[0]; if (!f) return; const compressed = await compressImage(f); const reader = new FileReader(); reader.onload = e2 => setRefImage({ file: compressed, dataUrl: e2.target!.result as string }); reader.readAsDataURL(compressed); }; inp.click(); }}
                   >
                     {refImage ? (
                       <div className="relative">
