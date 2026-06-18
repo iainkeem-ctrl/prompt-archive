@@ -59,7 +59,7 @@ export default function Home() {
   const [previewFile, setPreviewFile] = useState<File | null>(null);
   const [comfyJson, setComfyJson] = useState('');
   const [uploadForm, setUploadForm] = useState({ prompt: '', model: '', negative_prompt: '', category: 'etc', notes: '' });
-  type BatchLog = { name: string; status: 'pending' | 'done' | 'error' };
+  type BatchLog = { name: string; status: 'pending' | 'done' | 'duplicate' | 'error' };
   const [batchProgress, setBatchProgress] = useState<{ total: number; done: number; current: string; log: BatchLog[] } | null>(null);
   const [pagedragOver, setPageDragOver] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -139,6 +139,12 @@ export default function Home() {
     return { positive: '', negative: '', model: '', ksampler: {} };
   };
 
+  const hashFile = async (file: File): Promise<string> => {
+    const buf = await file.arrayBuffer();
+    const hash = await crypto.subtle.digest('SHA-256', buf);
+    return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
+  };
+
   const compressImage = (file: File): Promise<File> =>
     new Promise(resolve => {
       const img = new Image();
@@ -199,8 +205,8 @@ export default function Home() {
     if (file && (file.type.startsWith('image/') || /\.(png|jpg|jpeg|webp)$/i.test(file.name))) handleFilePick(file);
   };
 
-  const uploadFileDirect = async (file: File) => {
-    const compressed = await compressImage(file);
+  const uploadFileDirect = async (file: File): Promise<'ok' | 'duplicate'> => {
+    const [compressed, fileHash] = await Promise.all([compressImage(file), hashFile(file)]);
     let positive = '', negative = '', model = '', ksamplerStr = '';
     if (file.name.endsWith('.png')) {
       const meta = await extractPngMeta(file);
@@ -210,8 +216,7 @@ export default function Home() {
           const parsed = JSON.parse(raw);
           const info = parseComfyInfo(parsed);
           if (info.positive || info.model) {
-            positive = info.positive;
-            negative = info.negative;
+            positive = info.positive; negative = info.negative;
             model = info.model;
             ksamplerStr = Object.keys(info.ksampler).length > 0 ? JSON.stringify(info.ksampler) : '';
             break;
@@ -227,22 +232,25 @@ export default function Home() {
     fd.set('category', 'etc');
     fd.set('comfy_settings', ksamplerStr);
     fd.set('notes', '');
+    fd.set('file_hash', fileHash);
     const res = await fetch('/api/upload', { method: 'POST', body: fd });
+    if (res.status === 409) return 'duplicate';
     if (!res.ok) throw new Error(await res.text());
+    return 'ok';
   };
 
   const handleBatchDrop = async (files: File[]) => {
     const images = files.filter(f => f.type.startsWith('image/') || /\.(png|jpg|jpeg|webp|gif)$/i.test(f.name));
     if (images.length === 0) return;
     if (images.length === 1) { setShowUpload(true); handleFilePick(images[0]); return; }
-    type LogItem = { name: string; status: 'pending' | 'done' | 'error' };
+    type LogItem = { name: string; status: 'pending' | 'done' | 'duplicate' | 'error' };
     const log: LogItem[] = images.map(f => ({ name: f.name, status: 'pending' }));
     setBatchProgress({ total: images.length, done: 0, current: images[0].name, log });
     for (let i = 0; i < images.length; i++) {
       setBatchProgress(p => p ? { ...p, done: i, current: images[i].name } : p);
       try {
-        await uploadFileDirect(images[i]);
-        log[i] = { name: log[i].name, status: 'done' };
+        const result = await uploadFileDirect(images[i]);
+        log[i] = { name: log[i].name, status: result === 'duplicate' ? 'duplicate' : 'done' };
       } catch {
         log[i] = { name: log[i].name, status: 'error' };
       }
@@ -261,6 +269,7 @@ export default function Home() {
   const handleUpload = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!previewFile) { alert('이미지를 선택해주세요'); return; }
+    const fileHash = await hashFile(previewFile);
     const fd = new FormData();
     fd.set('image', previewFile);
     fd.set('prompt', uploadForm.prompt);
@@ -269,9 +278,20 @@ export default function Home() {
     fd.set('category', uploadForm.category);
     fd.set('notes', uploadForm.notes);
     fd.set('comfy_settings', comfyJson);
+    fd.set('file_hash', fileHash);
     setUploading(true);
     try {
       const res = await fetch('/api/upload', { method: 'POST', body: fd });
+      if (res.status === 409) {
+        const { existing } = await res.json();
+        const ok = confirm(`⚠️ 중복 이미지 감지\n\n이미 동일한 파일이 등록되어 있어요.\n모델: ${existing.model}\n\n그래도 업로드할까요?`);
+        if (!ok) { setUploading(false); return; }
+        fd.delete('file_hash');
+        const res2 = await fetch('/api/upload', { method: 'POST', body: fd });
+        if (!res2.ok) throw new Error(await res2.text());
+        resetUploadModal(); setShowUpload(false); await fetchEntries();
+        setUploading(false); return;
+      }
       if (!res.ok) throw new Error(await res.text());
       resetUploadModal();
       setShowUpload(false);
@@ -321,9 +341,9 @@ export default function Home() {
           {batchProgress.log.map((item, i) => (
             <div key={i} className="flex items-center gap-2">
               <span className="text-sm flex-shrink-0">
-                {item.status === 'done' ? '✓' : item.status === 'error' ? '✗' : '·'}
+                {item.status === 'done' ? '✓' : item.status === 'duplicate' ? '⊟' : item.status === 'error' ? '✗' : '·'}
               </span>
-              <span className={`text-xs truncate ${item.status === 'done' ? 'text-zinc-400' : item.status === 'error' ? 'text-red-400' : 'text-zinc-200'}`}>
+              <span className={`text-xs truncate ${item.status === 'done' ? 'text-zinc-400' : item.status === 'duplicate' ? 'text-yellow-500' : item.status === 'error' ? 'text-red-400' : 'text-zinc-200'}`}>
                 {item.name}
               </span>
             </div>

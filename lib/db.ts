@@ -16,7 +16,9 @@ export async function initDb() {
       category TEXT NOT NULL DEFAULT 'etc',
       comfy_settings TEXT DEFAULT NULL,
       notes TEXT DEFAULT '',
+      file_hash TEXT DEFAULT NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `;
+  await sql`ALTER TABLE entries ADD COLUMN IF NOT EXISTS file_hash TEXT DEFAULT NULL`;
 }
