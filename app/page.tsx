@@ -62,6 +62,34 @@ export default function Home() {
   type BatchLog = { name: string; status: 'pending' | 'done' | 'duplicate' | 'error' };
   const [batchProgress, setBatchProgress] = useState<{ total: number; done: number; current: string; log: BatchLog[] } | null>(null);
 
+  const [selectMode, setSelectMode] = useState(false);
+  const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
+  const [bulkCategory, setBulkCategory] = useState('');
+
+  const toggleCheck = (id: string) => setCheckedIds(prev => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
+
+  const bulkDelete = async () => {
+    if (!confirm(`${checkedIds.size}개 삭제할까요?`)) return;
+    await Promise.all([...checkedIds].map(id => fetch(`/api/entries/${id}`, { method: 'DELETE' })));
+    setCheckedIds(new Set());
+    setSelectMode(false);
+    fetchEntries();
+  };
+
+  const bulkChangeCategory = async () => {
+    if (!bulkCategory) return;
+    await Promise.all([...checkedIds].map(id =>
+      fetch(`/api/entries/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ category: bulkCategory }) })
+    ));
+    setCheckedIds(new Set());
+    setSelectMode(false);
+    fetchEntries();
+  };
+
   type DupGroup = { key_prompt: string; ids: string[]; image_paths: string[]; models: string[]; dates: string[]; cnt: number };
   const [showDuplicates, setShowDuplicates] = useState(false);
   const [dupGroups, setDupGroups] = useState<DupGroup[]>([]);
@@ -397,6 +425,12 @@ export default function Home() {
           </div>
           <span className="text-zinc-500 text-sm">{entries.length} entries</span>
           <button
+            onClick={() => { setSelectMode(v => !v); setCheckedIds(new Set()); }}
+            className={`px-3 py-1.5 text-xs font-semibold rounded-full transition-colors ${selectMode ? 'bg-white text-black' : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'}`}
+          >
+            {selectMode ? '취소' : '선택'}
+          </button>
+          <button
             onClick={openDuplicates}
             className="px-3 py-1.5 bg-zinc-800 text-zinc-300 text-xs font-semibold rounded-full hover:bg-zinc-700 transition-colors"
           >
@@ -451,27 +485,39 @@ export default function Home() {
           </div>
         ) : (
           <div className="gap-3 space-y-3" style={{ columns }}>
-            {entries.map(entry => (
-              <div
-                key={entry.id}
-                onClick={() => setSelected(entry)}
-                className="break-inside-avoid cursor-pointer group rounded-lg overflow-hidden bg-zinc-900"
-              >
-                <div className="relative">
-                  <img
-                    src={entry.image_path}
-                    alt={entry.prompt.slice(0, 40)}
-                    className="w-full object-cover group-hover:opacity-80 transition-opacity"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-2">
-                    <p className="text-xs text-zinc-300 line-clamp-2">{entry.prompt}</p>
+            {entries.map(entry => {
+              const checked = checkedIds.has(entry.id);
+              return (
+                <div
+                  key={entry.id}
+                  onClick={() => selectMode ? toggleCheck(entry.id) : setSelected(entry)}
+                  className={`break-inside-avoid cursor-pointer group rounded-lg overflow-hidden bg-zinc-900 transition-all ${selectMode && checked ? 'ring-2 ring-white' : ''}`}
+                >
+                  <div className="relative">
+                    <img
+                      src={entry.image_path}
+                      alt={entry.prompt.slice(0, 40)}
+                      className={`w-full object-cover transition-opacity ${selectMode && !checked ? 'opacity-60' : 'group-hover:opacity-80'}`}
+                    />
+                    {selectMode && (
+                      <div className="absolute top-2 left-2">
+                        <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${checked ? 'bg-white border-white' : 'border-zinc-400 bg-black/40'}`}>
+                          {checked && <span className="text-black text-xs font-bold">✓</span>}
+                        </div>
+                      </div>
+                    )}
+                    {!selectMode && (
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-2">
+                        <p className="text-xs text-zinc-300 line-clamp-2">{entry.prompt}</p>
+                      </div>
+                    )}
+                  </div>
+                  <div className="px-2 py-1.5">
+                    <span className="text-xs text-zinc-400 font-medium">{entry.model}</span>
                   </div>
                 </div>
-                <div className="px-2 py-1.5">
-                  <span className="text-xs text-zinc-400 font-medium">{entry.model}</span>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </main>
@@ -559,6 +605,39 @@ export default function Home() {
               </button>
             </form>
           </div>
+        </div>
+      )}
+
+      {selectMode && checkedIds.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-zinc-900 border border-zinc-700 rounded-2xl px-5 py-3 shadow-2xl flex items-center gap-4">
+          <span className="text-sm text-zinc-300 font-medium">{checkedIds.size}개 선택됨</span>
+          <div className="flex items-center gap-2">
+            <select
+              value={bulkCategory}
+              onChange={e => setBulkCategory(e.target.value)}
+              className="bg-zinc-800 text-zinc-200 text-xs px-3 py-1.5 rounded-full border border-zinc-700 outline-none"
+            >
+              <option value="">분류 변경...</option>
+              <option value="portrait">인물</option>
+              <option value="product">제품</option>
+              <option value="graphic">그래픽</option>
+              <option value="etc">기타</option>
+            </select>
+            <button
+              onClick={bulkChangeCategory}
+              disabled={!bulkCategory}
+              className="px-3 py-1.5 bg-zinc-700 text-zinc-200 text-xs font-semibold rounded-full hover:bg-zinc-600 disabled:opacity-40 transition-colors"
+            >
+              적용
+            </button>
+          </div>
+          <div className="w-px h-5 bg-zinc-700" />
+          <button onClick={bulkDelete} className="px-3 py-1.5 bg-red-600 text-white text-xs font-semibold rounded-full hover:bg-red-500 transition-colors">
+            삭제
+          </button>
+          <button onClick={() => { setCheckedIds(new Set()); setSelectMode(false); }} className="text-zinc-500 hover:text-white text-sm">
+            취소
+          </button>
         </div>
       )}
 
