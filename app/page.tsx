@@ -68,6 +68,10 @@ export default function Home() {
   const dragStart = useRef<{ x: number; y: number } | null>(null);
   const mainRef = useRef<HTMLDivElement>(null);
   const [bulkCategory, setBulkCategory] = useState('');
+  const [generating, setGenerating] = useState(false);
+  const [genResult, setGenResult] = useState<{ prompt: string; negative_prompt: string } | null>(null);
+  const [genInstruction, setGenInstruction] = useState('');
+  const [showGenModal, setShowGenModal] = useState(false);
 
   const toggleCheck = (id: string) => setCheckedIds(prev => {
     const next = new Set(prev);
@@ -374,6 +378,29 @@ export default function Home() {
     }
   };
 
+  const generatePrompt = async () => {
+    const selected = entries.filter(e => checkedIds.has(e.id));
+    if (selected.length === 0) return;
+    setGenerating(true);
+    setGenResult(null);
+    setShowGenModal(true);
+    try {
+      const res = await fetch('/api/generate-prompt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ entries: selected, instruction: genInstruction }),
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      setGenResult({ prompt: data.prompt, negative_prompt: data.negative_prompt });
+    } catch (e) {
+      alert('생성 실패: ' + e);
+      setShowGenModal(false);
+    } finally {
+      setGenerating(false);
+    }
+  };
+
   const openDuplicates = async () => {
     setShowDuplicates(true);
     setDupLoading(true);
@@ -664,6 +691,56 @@ export default function Home() {
         </div>
       )}
 
+      {showGenModal && (
+        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4" onClick={() => !generating && setShowGenModal(false)}>
+          <div className="bg-zinc-900 rounded-xl w-full max-w-2xl max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800">
+              <h2 className="font-semibold text-sm">✦ AI 프롬프트 생성</h2>
+              {!generating && <button onClick={() => setShowGenModal(false)} className="text-zinc-500 hover:text-white text-lg">×</button>}
+            </div>
+            <div className="p-5 space-y-4 overflow-y-auto">
+              {generating && (
+                <div className="flex items-center gap-3 text-zinc-400 py-8 justify-center">
+                  <div className="w-4 h-4 border-2 border-zinc-600 border-t-white rounded-full animate-spin" />
+                  <span className="text-sm">레퍼런스 분석 중...</span>
+                </div>
+              )}
+              {genResult && (
+                <>
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-xs text-zinc-500">Prompt</label>
+                      <button onClick={() => navigator.clipboard.writeText(genResult.prompt)} className="text-xs text-zinc-500 hover:text-white">복사</button>
+                    </div>
+                    <textarea readOnly value={genResult.prompt} rows={8} className="w-full bg-zinc-800 text-sm text-zinc-200 rounded-lg px-3 py-2 outline-none resize-none" />
+                  </div>
+                  {genResult.negative_prompt && (
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="text-xs text-zinc-500">Negative Prompt</label>
+                        <button onClick={() => navigator.clipboard.writeText(genResult.negative_prompt)} className="text-xs text-zinc-500 hover:text-white">복사</button>
+                      </div>
+                      <textarea readOnly value={genResult.negative_prompt} rows={4} className="w-full bg-zinc-800 text-sm text-zinc-400 rounded-lg px-3 py-2 outline-none resize-none" />
+                    </div>
+                  )}
+                  <div className="flex gap-2">
+                    <input
+                      value={genInstruction}
+                      onChange={e => setGenInstruction(e.target.value)}
+                      placeholder="추가 요청 (예: 남성 모델로, 야외 배경으로...)"
+                      className="flex-1 bg-zinc-800 text-sm text-zinc-200 rounded-lg px-3 py-2 outline-none placeholder:text-zinc-600"
+                    />
+                    <button onClick={generatePrompt} disabled={generating} className="px-4 py-2 bg-indigo-600 text-white text-xs font-semibold rounded-lg hover:bg-indigo-500 disabled:opacity-50">
+                      재생성
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {selectMode && checkedIds.size > 0 && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-zinc-900 border border-zinc-700 rounded-2xl px-5 py-3 shadow-2xl flex items-center gap-4">
           <span className="text-sm text-zinc-300 font-medium">{checkedIds.size}개 선택됨</span>
@@ -687,6 +764,10 @@ export default function Home() {
               적용
             </button>
           </div>
+          <div className="w-px h-5 bg-zinc-700" />
+          <button onClick={generatePrompt} disabled={generating} className="px-3 py-1.5 bg-indigo-600 text-white text-xs font-semibold rounded-full hover:bg-indigo-500 disabled:opacity-50 transition-colors">
+            ✦ 프롬프트 생성
+          </button>
           <div className="w-px h-5 bg-zinc-700" />
           <button onClick={bulkDelete} className="px-3 py-1.5 bg-red-600 text-white text-xs font-semibold rounded-full hover:bg-red-500 transition-colors">
             삭제
