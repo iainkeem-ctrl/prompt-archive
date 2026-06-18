@@ -455,7 +455,7 @@ export default function Home() {
       </div>
     )}
       <header className="border-b border-zinc-800 px-6 py-4 flex items-center justify-between">
-        <h1 className="text-xl font-bold tracking-tight">Prompt Archive</h1>
+        <h1 className="text-xl font-bold tracking-tight cursor-pointer hover:text-zinc-300 transition-colors" onClick={() => { setFilterModel(''); setFilterCategory('all'); setSort('newest'); setSelectMode(false); setCheckedIds(new Set()); }}>Prompt Archive</h1>
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
             <span className="text-xs text-zinc-600">⊟</span>
@@ -539,7 +539,7 @@ export default function Home() {
             <p className="text-sm mt-1">이미지를 업로드해서 시작하세요</p>
           </div>
         ) : (
-          <div className="gap-3 space-y-3" style={{ columns }}>
+          <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
             {entries.map(entry => {
               const checked = checkedIds.has(entry.id);
               return (
@@ -547,7 +547,7 @@ export default function Home() {
                   key={entry.id}
                   data-entry-id={entry.id}
                   onClick={() => selectMode ? toggleCheck(entry.id) : setSelected(entry)}
-                  className={`break-inside-avoid cursor-pointer group rounded-lg overflow-hidden bg-zinc-900 transition-all ${selectMode && checked ? 'ring-2 ring-white' : ''}`}
+                  className={`cursor-pointer group rounded-lg overflow-hidden bg-zinc-900 transition-all ${selectMode && checked ? 'ring-2 ring-white' : ''}`}
                 >
                   <div className="relative">
                     <img
