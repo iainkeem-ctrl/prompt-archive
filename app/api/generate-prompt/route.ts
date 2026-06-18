@@ -35,7 +35,7 @@ ${archiveContext}
 
 아카이브의 퀄리티 키워드, 조명, 스타일 패턴을 유지하세요.`;
 
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-lite' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
     let result;
 
