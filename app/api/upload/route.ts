@@ -21,6 +21,7 @@ export async function POST(req: NextRequest) {
     }
 
     const file_hash = (formData.get('file_hash') as string) || null;
+    const original_filename = file.name || null;
 
     if (file_hash) {
       const [existing] = await sql`SELECT id, image_path, prompt, model FROM entries WHERE file_hash=${file_hash} LIMIT 1`;
@@ -34,8 +35,8 @@ export async function POST(req: NextRequest) {
     const blob = await put(`images/${id}.${ext}`, file, { access: 'public' });
 
     await sql`
-      INSERT INTO entries (id, image_path, prompt, negative_prompt, model, category, comfy_settings, notes, file_hash)
-      VALUES (${id}, ${blob.url}, ${prompt}, ${negative_prompt}, ${model}, ${category}, ${comfy_settings}, ${notes}, ${file_hash})
+      INSERT INTO entries (id, image_path, prompt, negative_prompt, model, category, comfy_settings, notes, file_hash, original_filename)
+      VALUES (${id}, ${blob.url}, ${prompt}, ${negative_prompt}, ${model}, ${category}, ${comfy_settings}, ${notes}, ${file_hash}, ${original_filename})
     `;
 
     return NextResponse.json({ id, image_path: blob.url }, { status: 201 });

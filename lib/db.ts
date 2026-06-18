@@ -21,4 +21,5 @@ export async function initDb() {
     )
   `;
   await sql`ALTER TABLE entries ADD COLUMN IF NOT EXISTS file_hash TEXT DEFAULT NULL`;
+  await sql`ALTER TABLE entries ADD COLUMN IF NOT EXISTS original_filename TEXT DEFAULT NULL`;
 }

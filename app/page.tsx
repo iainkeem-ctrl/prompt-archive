@@ -127,7 +127,7 @@ export default function Home() {
     fetchEntries();
   };
 
-  type DupGroup = { key_prompt: string; ids: string[]; image_paths: string[]; models: string[]; dates: string[]; cnt: number };
+  type DupGroup = { key_prompt: string; filename?: string; ids: string[]; image_paths: string[]; models: string[]; dates: string[]; cnt: number };
   const [showDuplicates, setShowDuplicates] = useState(false);
   const [dupGroups, setDupGroups] = useState<DupGroup[]>([]);
   const [dupLoading, setDupLoading] = useState(false);
@@ -719,6 +719,7 @@ export default function Home() {
               {!dupLoading && dupGroups.length === 0 && <div className="text-zinc-500 text-sm text-center py-10">중복 없음 👍</div>}
               {dupGroups.map((group, gi) => (
                 <div key={gi} className="border border-zinc-800 rounded-lg p-4">
+                  {group.filename && <p className="text-xs text-zinc-400 font-medium mb-1">📄 {group.filename}</p>}
                   <p className="text-xs text-zinc-500 mb-3 line-clamp-2">{group.key_prompt}</p>
                   <div className="flex gap-3 flex-wrap">
                     {group.ids.map((id, ii) => {
