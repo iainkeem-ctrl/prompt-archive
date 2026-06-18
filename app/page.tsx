@@ -195,7 +195,7 @@ export default function Home() {
     e.preventDefault();
     setDragOver(false);
     const file = e.dataTransfer.files[0];
-    if (file && file.type.startsWith('image/')) handleFilePick(file);
+    if (file && (file.type.startsWith('image/') || /\.(png|jpg|jpeg|webp)$/i.test(file.name))) handleFilePick(file);
   };
 
   const uploadFileDirect = async (file: File) => {
@@ -231,7 +231,7 @@ export default function Home() {
   };
 
   const handleBatchDrop = async (files: File[]) => {
-    const images = files.filter(f => f.type.startsWith('image/'));
+    const images = files.filter(f => f.type.startsWith('image/') || /\.(png|jpg|jpeg|webp|gif)$/i.test(f.name));
     if (images.length === 0) return;
     if (images.length === 1) { setShowUpload(true); handleFilePick(images[0]); return; }
     setBatchProgress({ total: images.length, done: 0, current: images[0].name });
