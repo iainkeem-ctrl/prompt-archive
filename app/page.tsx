@@ -470,9 +470,9 @@ export default function Home() {
   return (
     <div
       className={`min-h-screen bg-zinc-950 text-white relative ${pagedragOver ? 'ring-2 ring-inset ring-white/30' : ''}`}
-      onDragOver={e => { e.preventDefault(); setPageDragOver(true); }}
+      onDragOver={e => { if (showGenModal || showUpload) return; e.preventDefault(); setPageDragOver(true); }}
       onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setPageDragOver(false); }}
-      onDrop={e => { e.preventDefault(); setPageDragOver(false); const files = Array.from(e.dataTransfer.files); console.log('dropped files count:', files.length, files.map(f => f.name)); handleBatchDrop(files); }}
+      onDrop={e => { if (showGenModal || showUpload) return; e.preventDefault(); setPageDragOver(false); const files = Array.from(e.dataTransfer.files); console.log('dropped files count:', files.length, files.map(f => f.name)); handleBatchDrop(files); }}
     >
     {pagedragOver && (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 pointer-events-none">
