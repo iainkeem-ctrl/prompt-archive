@@ -852,6 +852,14 @@ export default function Home() {
                       <textarea readOnly value={genResult.negative_prompt} rows={3} className="w-full bg-zinc-800 text-sm text-zinc-400 rounded-lg px-3 py-2 outline-none resize-none" />
                     </div>
                   )}
+                  {genResult.negative_prompt && (
+                    <button
+                      onClick={() => navigator.clipboard.writeText(`${genResult.prompt}\n\nNegative prompt: ${genResult.negative_prompt}`)}
+                      className="w-full py-2 bg-zinc-700 text-zinc-200 text-xs font-semibold rounded-lg hover:bg-zinc-600"
+                    >
+                      포지티브 + 네거티브 한번에 복사
+                    </button>
+                  )}
                   <div className="flex gap-2">
                     <button onClick={() => setGenResult(null)} className="flex-1 py-2 bg-zinc-800 text-zinc-300 text-xs font-semibold rounded-lg hover:bg-zinc-700">← 돌아가기</button>
                     <button onClick={() => generatePrompt(genTab)} disabled={generating} className="flex-1 py-2 bg-indigo-600 text-white text-xs font-semibold rounded-lg hover:bg-indigo-500 disabled:opacity-50">재생성</button>
@@ -994,7 +1002,10 @@ export default function Home() {
                   )}
                 </div>
                 <div>
-                  <p className="text-xs text-zinc-500 mb-1">Prompt</p>
+                  <div className="flex items-center justify-between mb-1">
+                    <p className="text-xs text-zinc-500">Prompt</p>
+                    {!editing && <button onClick={() => navigator.clipboard.writeText(selected.prompt)} className="text-xs text-zinc-500 hover:text-white px-2 py-0.5 bg-zinc-800 rounded">복사</button>}
+                  </div>
                   {editing ? (
                     <textarea value={editForm.prompt ?? ''} onChange={e => setEditForm(f => ({...f, prompt: e.target.value}))} rows={4} className="w-full bg-zinc-800 text-sm text-zinc-200 rounded-lg px-3 py-2 outline-none resize-none" />
                   ) : (
@@ -1002,7 +1013,10 @@ export default function Home() {
                   )}
                 </div>
                 <div>
-                  <p className="text-xs text-zinc-500 mb-1">Negative</p>
+                  <div className="flex items-center justify-between mb-1">
+                    <p className="text-xs text-zinc-500">Negative</p>
+                    {!editing && selected.negative_prompt && <button onClick={() => navigator.clipboard.writeText(selected.negative_prompt)} className="text-xs text-zinc-500 hover:text-white px-2 py-0.5 bg-zinc-800 rounded">복사</button>}
+                  </div>
                   {editing ? (
                     <textarea value={editForm.negative_prompt ?? ''} onChange={e => setEditForm(f => ({...f, negative_prompt: e.target.value}))} rows={2} className="w-full bg-zinc-800 text-sm text-zinc-400 rounded-lg px-3 py-2 outline-none resize-none" />
                   ) : (
@@ -1011,7 +1025,10 @@ export default function Home() {
                 </div>
                 {selected.comfy_settings && !editing && (
                   <div>
-                    <p className="text-xs text-zinc-500 mb-1">ComfyUI Settings</p>
+                    <div className="flex items-center justify-between mb-1">
+                      <p className="text-xs text-zinc-500">ComfyUI Settings</p>
+                      <button onClick={() => { let txt = selected.comfy_settings!; try { txt = JSON.stringify(JSON.parse(txt), null, 2); } catch {} navigator.clipboard.writeText(txt); }} className="text-xs text-zinc-500 hover:text-white px-2 py-0.5 bg-zinc-800 rounded">복사</button>
+                    </div>
                     <pre className="text-xs text-zinc-400 bg-zinc-800 p-3 rounded overflow-auto max-h-48">
                       {(() => { try { return JSON.stringify(JSON.parse(selected.comfy_settings!), null, 2); } catch { return selected.comfy_settings; } })()}
                     </pre>
