@@ -3,9 +3,9 @@ import { getDb } from '@/lib/db';
 
 export async function GET() {
   const sql = getDb();
-  const rows = await sql`
+  // Group 1: exact file hash match (most reliable)
+  const byHash = await sql`
     SELECT
-      file_hash,
       trim(prompt) as key_prompt,
       array_agg(id ORDER BY created_at ASC) as ids,
       array_agg(image_path ORDER BY created_at ASC) as image_paths,
@@ -14,9 +14,25 @@ export async function GET() {
       count(*)::int as cnt
     FROM entries
     WHERE file_hash IS NOT NULL
-    GROUP BY file_hash, trim(prompt)
+    GROUP BY file_hash
     HAVING count(*) > 1
-    ORDER BY count(*) DESC
   `;
+  // Group 2: same prompt + model + comfy_settings (seed included) — catches old entries without hash
+  const byMeta = await sql`
+    SELECT
+      trim(prompt) as key_prompt,
+      array_agg(id ORDER BY created_at ASC) as ids,
+      array_agg(image_path ORDER BY created_at ASC) as image_paths,
+      array_agg(model ORDER BY created_at ASC) as models,
+      array_agg(created_at::text ORDER BY created_at ASC) as dates,
+      count(*)::int as cnt
+    FROM entries
+    WHERE file_hash IS NULL
+      AND comfy_settings IS NOT NULL
+      AND trim(comfy_settings) <> ''
+    GROUP BY trim(prompt), trim(model), trim(comfy_settings)
+    HAVING count(*) > 1
+  `;
+  const rows = [...byHash, ...byMeta].sort((a, b) => (b.cnt as number) - (a.cnt as number));
   return NextResponse.json(rows);
 }
